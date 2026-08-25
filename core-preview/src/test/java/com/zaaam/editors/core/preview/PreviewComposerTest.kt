@@ -94,4 +94,102 @@ class PreviewComposerTest {
         assertTrue(hasil.contains("alert('x');"))
         assertTrue(hasil.contains("window.__zaaam_bridge"))
     }
+
+    // --- Fase 4: instrumentasi console ---
+
+    @Test
+    fun `payload js memakai bridge dua argumen tanpa json stringify`() {
+        val hasil = PreviewComposer.compose(htmlDenganPlaceholder(), null, "x();")
+
+        assertTrue(hasil.contains("<script>window.__zaaam_bridge"))
+        assertTrue(hasil.contains("ZaaamBridge.postMessage(String(l),String(m))"))
+        assertFalse(hasil.contains("JSON.stringify"))
+    }
+
+    @Test
+    fun `instrumentasi mengoverride log warn error dan listener error`() {
+        val hasil = PreviewComposer.compose(htmlDenganPlaceholder(), null, "")
+
+        assertTrue(hasil.contains("console.log=function(){send(\"log\",arguments)"))
+        assertTrue(hasil.contains("console.warn=function(){send(\"warn\",arguments)"))
+        assertTrue(hasil.contains("console.error=function(){send(\"error\",arguments)"))
+        assertTrue(hasil.contains("window.addEventListener(\"error\""))
+        assertTrue(hasil.contains("\"preview siap\""))
+    }
+
+    @Test
+    fun `js user tetap segmen terakhir sebelum penutup script`() {
+        val hasil = PreviewComposer.compose(htmlDenganPlaceholder(), null, "a();")
+
+        val posUser = hasil.indexOf("a();")
+        val posTutup = hasil.lastIndexOf("</script>")
+        assertTrue(posUser in 0 until posTutup)
+        // Tidak ada kode instrumentasi SETELAH js user.
+        assertFalse(hasil.substring(posUser).contains("__zaaam_bridge = {"))
+    }
+
+    // --- Fase 4: fallback append saat placeholder absen ---
+
+    @Test
+    fun `css tanpa placeholder di-append di akhir dokumen`() {
+        val htmlPolos = "<html><body><h1>Halo</h1></body></html>"
+        val hasil = PreviewComposer.compose(htmlPolos, "p { margin: 0 }", null)
+
+        assertFalse(hasil.contains("""<link rel="""))
+        assertTrue(hasil.endsWith("<style>p { margin: 0 }</style>"))
+    }
+
+    @Test
+    fun `js tanpa placeholder di-append di akhir dokumen`() {
+        val htmlPolos = "<html><body><h1>Halo</h1></body></html>"
+        val hasil = PreviewComposer.compose(htmlPolos, null, "doIt();")
+
+        assertTrue(hasil.endsWith("doIt();</script>"))
+        assertTrue(hasil.contains("window.__zaaam_bridge"))
+        assertTrue(hasil.contains("doIt();"))
+    }
+
+    @Test
+    fun `fallback append tidak aktif kalau placeholder ketemu`() {
+        val hasil = PreviewComposer.compose(htmlDenganPlaceholder(), "a { color: red }", "b();")
+
+        // Hanya SATU blok style/script hasil replace — tidak ada duplikat append.
+        assertEquals(1, Regex("<style>").findAll(hasil).count())
+        assertEquals(1, Regex("<script>").findAll(hasil).count())
+        assertEquals(1, Regex("</style>").findAll(hasil).count())
+    }
+
+    @Test
+    fun `compose tanpa keduanya tetap identitas termasuk tanpa fallback`() {
+        val htmlPolos = "<html><body>x</body></html>"
+        assertEquals(htmlPolos, PreviewComposer.compose(htmlPolos, null, null))
+    }
+
+    // --- Fase 4: dokumen standalone untuk file .css / .js langsung ---
+
+    @Test
+    fun `wrapStandaloneDocument css membungkus style dan terescape`() {
+        val hasil = PreviewComposer.wrapStandaloneDocument(
+            PreviewComposer.StandaloneKind.CSS,
+            """p::after { content: "</STYLE>" }"""
+        )
+
+        assertTrue(hasil.startsWith("<!DOCTYPE html>"))
+        assertTrue(hasil.contains("<style>"))
+        assertFalse(hasil.contains("</STYLE>"))
+        assertTrue(hasil.contains("<\\/STYLE>"))
+    }
+
+    @Test
+    fun `wrapStandaloneDocument js membawa bridge dan terescape`() {
+        val hasil = PreviewComposer.wrapStandaloneDocument(
+            PreviewComposer.StandaloneKind.JS,
+            "var s = '</ScRiPt>';"
+        )
+
+        assertTrue(hasil.startsWith("<!DOCTYPE html>"))
+        assertTrue(hasil.contains("window.__zaaam_bridge"))
+        assertFalse(hasil.contains("</ScRiPt>"))
+        assertTrue(hasil.contains("<\\/ScRiPt>"))
+    }
 }
