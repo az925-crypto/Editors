@@ -27,6 +27,25 @@ internal fun isUsableAsText(bytes: ByteArray): Boolean {
     }
 }
 
+// Bounded read setara InputStream.readNBytes(limit+1): melempar Exception begitu total
+// byte melewati batas, supaya file raksasa tidak pernah termuat utuh ke memori.
+// INTERNAL: diekspos untuk unit test (BoundedReadTest).
+internal fun readBounded(stream: java.io.InputStream, limitBytes: Long): ByteArray {
+    val out = java.io.ByteArrayOutputStream()
+    val buf = ByteArray(64 * 1024)
+    var total = 0L
+    while (true) {
+        val n = stream.read(buf)
+        if (n < 0) break
+        total += n
+        if (total > limitBytes) {
+            throw Exception("File terlalu besar untuk dibuka (maksimal ${limitBytes / (1024 * 1024)}MB)")
+        }
+        out.write(buf, 0, n)
+    }
+    return out.toByteArray()
+}
+
 class SafFileSystemImpl(private val resolver: ContentResolver) : SafFileSystem {
 
     companion object {
@@ -95,24 +114,6 @@ class SafFileSystemImpl(private val resolver: ContentResolver) : SafFileSystem {
         } catch (e: Exception) {
             FsResult.Error(e)
         }
-    }
-
-    // Bounded read setara InputStream.readNBytes(limit+1): melempar Exception begitu total
-    // byte melewati batas, supaya file raksasa tidak pernah termuat utuh ke memori.
-    private fun readBounded(stream: java.io.InputStream, limitBytes: Long): ByteArray {
-        val out = java.io.ByteArrayOutputStream()
-        val buf = ByteArray(64 * 1024)
-        var total = 0L
-        while (true) {
-            val n = stream.read(buf)
-            if (n < 0) break
-            total += n
-            if (total > limitBytes) {
-                throw Exception("File terlalu besar untuk dibuka (maksimal ${limitBytes / (1024 * 1024)}MB)")
-            }
-            out.write(buf, 0, n)
-        }
-        return out.toByteArray()
     }
 
     private fun querySize(uri: Uri): Long? {

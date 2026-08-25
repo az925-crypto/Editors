@@ -29,6 +29,11 @@
       "name": "json",
       "scopeName": "source.json",
       "path": "./json.tmLanguage.json"
+    },
+    {
+      "name": "plaintext",
+      "scopeName": "text.plain",
+      "path": "./plain.tmLanguage.json"
     }
   ]
 }
