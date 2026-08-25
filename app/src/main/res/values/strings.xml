@@ -1,70 +1,70 @@
-&lt;resources&gt;
-    &lt;string name="app_name"&gt;zaaam/editors&lt;/string&gt;
+<resources>
+    <string name="app_name">zaaam/editors</string>
 
-    &lt;string name="empty_editor"&gt;Tidak ada file terbuka&lt;/string&gt;
-    &lt;string name="empty_editor_desc"&gt;Buka file dari tab Files untuk mulai mengedit. Layar LCD olive menunggu.&lt;/string&gt;
-    &lt;string name="open_files"&gt;Buka Files&lt;/string&gt;
+    <string name="empty_editor">Tidak ada file terbuka</string>
+    <string name="empty_editor_desc">Buka file dari tab Files untuk mulai mengedit. Layar LCD olive menunggu.</string>
+    <string name="open_files">Buka Files</string>
 
-    &lt;string name="empty_files"&gt;Belum ada file&lt;/string&gt;
-    &lt;string name="empty_files_desc"&gt;Buka folder dari breadcrumb atau izin storage dulu&lt;/string&gt;
-    &lt;string name="pick_folder"&gt;Pilih folder&lt;/string&gt;
+    <string name="empty_files">Belum ada file</string>
+    <string name="empty_files_desc">Buka folder dari breadcrumb atau izin storage dulu</string>
+    <string name="pick_folder">Pilih folder</string>
 
-    &lt;string name="search_hint"&gt;Cari file di folder ini…&lt;/string&gt;
+    <string name="search_hint">Cari file di folder ini…</string>
 
-    &lt;string name="recent_section"&gt;Terkini — cartridge tray&lt;/string&gt;
-    &lt;string name="hidden_on"&gt;HIDDEN: ON&lt;/string&gt;
-    &lt;string name="hidden_off"&gt;HIDDEN: OFF&lt;/string&gt;
-    &lt;string name="hidden_a11y"&gt;Tampilkan hidden files&lt;/string&gt;
+    <string name="recent_section">Terkini — cartridge tray</string>
+    <string name="hidden_on">HIDDEN: ON</string>
+    <string name="hidden_off">HIDDEN: OFF</string>
+    <string name="hidden_a11y">Tampilkan hidden files</string>
 
-    &lt;string name="perm_denied_title"&gt;Akses storage ditolak&lt;/string&gt;
-    &lt;string name="perm_denied_msg"&gt;zaaam/editors butuh izin SAF untuk membaca file. Tanpa itu, file tree kosong.&lt;/string&gt;
-    &lt;string name="retry_pick"&gt;Pilih folder&lt;/string&gt;
-    &lt;string name="dismiss_banner"&gt;Tutup&lt;/string&gt;
+    <string name="perm_denied_title">Akses storage ditolak</string>
+    <string name="perm_denied_msg">zaaam/editors butuh izin SAF untuk membaca file. Tanpa itu, file tree kosong.</string>
+    <string name="retry_pick">Pilih folder</string>
+    <string name="dismiss_banner">Tutup</string>
 
-    &lt;string name="saf_dialog_title"&gt;Izinkan akses file&lt;/string&gt;
-    &lt;string name="saf_dialog_body"&gt;zaaam/editors butuh izin SAF untuk membuka file kode kamu. Pilih folder root atau folder project saja.&lt;/string&gt;
-    &lt;string name="saf_perm_1"&gt;Browse semua folder via Storage Access Framework&lt;/string&gt;
-    &lt;string name="saf_perm_2"&gt;Akses hidden files (.gitignore, .thumbnails, dll)&lt;/string&gt;
-    &lt;string name="saf_perm_3"&gt;Tanpa izin lokasi &amp; tanpa tracking&lt;/string&gt;
-    &lt;string name="saf_btn_later"&gt;Nanti&lt;/string&gt;
-    &lt;string name="saf_btn_pick"&gt;Pilih folder&lt;/string&gt;
-    &lt;string name="saf_error"&gt;Akses ditolak. Coba lagi atau lanjut tanpa akses.&lt;/string&gt;
-    &lt;string name="saf_loading"&gt;Memilih folder…&lt;/string&gt;
-    &lt;string name="access_granted"&gt;Akses diberikan&lt;/string&gt;
-    &lt;string name="access_denied_no_perm"&gt;Masuk tanpa akses — beberapa fitur terbatas&lt;/string&gt;
+    <string name="saf_dialog_title">Izinkan akses file</string>
+    <string name="saf_dialog_body">zaaam/editors butuh akses penyimpanan untuk membuka file kode kamu. Pilih folder root atau folder project saja.</string>
+    <string name="saf_perm_1">Browse semua folder via Storage Access Framework</string>
+    <string name="saf_perm_2">Akses hidden files (.gitignore, .thumbnails, dll)</string>
+    <string name="saf_perm_3">Tanpa izin lokasi &amp; tanpa tracking</string>
+    <string name="saf_btn_later">Nanti</string>
+    <string name="saf_btn_pick">Pilih folder</string>
+    <string name="saf_error">Akses ditolak. Coba lagi atau lanjut tanpa akses.</string>
+    <string name="saf_loading">Memilih folder…</string>
+    <string name="access_granted">Akses diberikan</string>
+    <string name="access_denied_no_perm">Masuk tanpa akses — beberapa fitur terbatas</string>
 
-    &lt;string name="editor_undo"&gt;Urungkan&lt;/string&gt;
-    &lt;string name="editor_redo"&gt;Ulangi&lt;/string&gt;
-    &lt;string name="editor_find"&gt;Find&lt;/string&gt;
-    &lt;string name="editor_preview"&gt;Preview&lt;/string&gt;
-    &lt;string name="saving"&gt;Menyimpan…&lt;/string&gt;
-    &lt;string name="saved"&gt;Tersimpan %s&lt;/string&gt;
-    &lt;string name="binary_error_title"&gt;File tidak bisa dibuka sebagai teks&lt;/string&gt;
-    &lt;string name="binary_error_desc"&gt;%s adalah format biner. Edit teks tidak tersedia.&lt;/string&gt;
-    &lt;string name="open_hex_disabled"&gt;Buka sebagai hex — Phase 2&lt;/string&gt;
+    <string name="editor_undo">Urungkan</string>
+    <string name="editor_redo">Ulangi</string>
+    <string name="editor_find">Find</string>
+    <string name="editor_preview">Preview</string>
+    <string name="saving">Menyimpan…</string>
+    <string name="saved">Tersimpan %s</string>
+    <string name="binary_error_title">File tidak bisa dibuka sebagai teks</string>
+    <string name="binary_error_desc">%s adalah format biner. Edit teks tidak tersedia.</string>
+    <string name="open_hex_disabled">Buka sebagai hex — Phase 2</string>
 
-    &lt;string name="preview_empty"&gt;Tidak ada preview&lt;/string&gt;
-    &lt;string name="preview_empty_desc"&gt;Buka file HTML/CSS/JS di Editor, lalu tap Preview&lt;/string&gt;
-    &lt;string name="go_to_editor"&gt;Ke Editor&lt;/string&gt;
-    &lt;string name="url_refresh"&gt;Muat ulang preview&lt;/string&gt;
-    &lt;string name="updating"&gt;Memperbarui…&lt;/string&gt;
-    &lt;string name="console_label"&gt;CONSOLE&lt;/string&gt;
-    &lt;string name="console_clear"&gt;Clear&lt;/string&gt;
-    &lt;string name="console_count"&gt;%d pesan · &lt;b&gt;%d err&lt;/b&gt;&lt;/string&gt;
+    <string name="preview_empty">Tidak ada preview</string>
+    <string name="preview_empty_desc">Buka file HTML/CSS/JS di Editor, lalu tap Preview</string>
+    <string name="go_to_editor">Ke Editor</string>
+    <string name="url_refresh">Muat ulang preview</string>
+    <string name="updating">Memperbarui…</string>
+    <string name="console_label">CONSOLE</string>
+    <string name="console_clear">Clear</string>
+    <string name="console_count">%d pesan · <b>%d err</b></string>
 
-    &lt;string name="nav_files"&gt;Files&lt;/string&gt;
-    &lt;string name="nav_editor"&gt;Editor&lt;/string&gt;
-    &lt;string name="nav_preview"&gt;Preview&lt;/string&gt;
-    &lt;string name="nav_disabled_editor"&gt;Buka file dulu untuk mengedit&lt;/string&gt;
-    &lt;string name="nav_disabled_preview"&gt;Hanya file web (HTML/CSS/JS) bisa di-preview&lt;/string&gt;
+    <string name="nav_files">Files</string>
+    <string name="nav_editor">Editor</string>
+    <string name="nav_preview">Preview</string>
+    <string name="nav_disabled_editor">Buka file dulu untuk mengedit</string>
+    <string name="nav_disabled_preview">Hanya file web (HTML/CSS/JS) bisa di-preview</string>
 
-    &lt;string name="ctx_open"&gt;Buka&lt;/string&gt;
-    &lt;string name="ctx_rename"&gt;Rename&lt;/string&gt;
-    &lt;string name="ctx_delete"&gt;Hapus&lt;/string&gt;
-    &lt;string name="snack_deleted"&gt;%s dihapus&lt;/string&gt;
-    &lt;string name="snack_undo"&gt;Urungkan&lt;/string&gt;
-    &lt;string name="toast_find_stub"&gt;Find in file — Phase 2&lt;/string&gt;
-    &lt;string name="toast_open_settings"&gt;Stub: membuka pengaturan sistem&lt;/string&gt;
+    <string name="ctx_open">Buka</string>
+    <string name="ctx_rename">Rename</string>
+    <string name="ctx_delete">Hapus</string>
+    <string name="snack_deleted">%s dihapus</string>
+    <string name="snack_undo">Urungkan</string>
+    <string name="toast_find_stub">Find in file — Phase 2</string>
+    <string name="toast_open_settings">Stub: membuka pengaturan sistem</string>
 
-    &lt;string name="boot_skip"&gt;Lewati&lt;/string&gt;
-&lt;/resources&gt;
+    <string name="boot_skip">Lewati</string>
+</resources>
