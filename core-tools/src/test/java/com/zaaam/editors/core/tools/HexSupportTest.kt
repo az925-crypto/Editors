@@ -27,7 +27,7 @@ class HexSupportTest {
 
     @Test
     fun `formatRow memecah 16 byte per baris`() {
-        val bytes = ByteArray(40) { it.toByte() }
+        val bytes = ByteArray(48) { it.toByte() } // 3 baris penuh
         val row0 = formatRow(bytes, 0)
         val row2 = formatRow(bytes, 32)
         val row3 = formatRow(bytes, 48) // lewat batas → kosong
