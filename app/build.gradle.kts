@@ -78,4 +78,5 @@ dependencies {
     implementation(project(":core-preview"))
 
     testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
 }

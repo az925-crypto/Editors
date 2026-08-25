@@ -37,7 +37,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.zaaam.editors.core.editor.EditorEngine
 import com.zaaam.editors.core.editor.LanguageResolver
 import com.zaaam.editors.core.editor.SoraThemeMapper
+import com.zaaam.editors.core.fs.isWebFile
 import com.zaaam.editors.di.AppContainer
+import com.zaaam.editors.session.AppScreen
 import com.zaaam.editors.ui.theme.RetroTokens
 import io.github.rosemoe.sora.event.ContentChangeEvent
 import io.github.rosemoe.sora.langs.textmate.TextMateLanguage
@@ -97,8 +99,17 @@ fun EditorScreen(container: AppContainer) {
         }
         Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(text = "Find", modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(RetroTokens.Card).padding(horizontal = 12.dp, vertical = 6.dp), fontSize = 12.sp, color = RetroTokens.Dim)
-            if (vm.isWebFile(state.activeUri)) {
-                Text(text = "Preview ▶", modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(RetroTokens.Olive).padding(horizontal = 12.dp, vertical = 6.dp), fontSize = 12.sp, color = RetroTokens.Ink, fontWeight = FontWeight.Bold)
+            if (isWebFile(state.activeUri)) {
+                // Fase 4: chip kini fungsional — lompat langsung ke layar Preview.
+                Text(
+                    text = "Preview ▶",
+                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(RetroTokens.Olive).clickable {
+                        container.screenState.value = AppScreen.PREVIEW
+                    }.padding(horizontal = 12.dp, vertical = 6.dp),
+                    fontSize = 12.sp,
+                    color = RetroTokens.Ink,
+                    fontWeight = FontWeight.Bold
+                )
             }
         }
         val activeUri = state.activeUri

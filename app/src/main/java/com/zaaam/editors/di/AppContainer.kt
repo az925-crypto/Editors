@@ -12,6 +12,12 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
+
+// Fase 4: sinyal "isi file web berubah". Seq monotonic WAJIB — MutableStateFlow mengonflasi
+// nilai sama, dan dua ketikan di uri yang sama akan menghasilkan value identik kalau tick
+// cuma String uri (collector tidak bangun, preview basi).
+data class PreviewTick(val seq: Long, val uri: String)
 
 class AppContainer(application: Application) {
     val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
@@ -28,6 +34,16 @@ class AppContainer(application: Application) {
     val screenState = MutableStateFlow(AppScreen.FILES)
 
     // Shared antara FilesViewModel (penulis) dan EditorViewModel (pembaca) supaya isi file
-    // yang baru dibuka langsung tersedia di editor, bukan cuma tab kosong. Lihat CRITICAL 3.
+    // yang baru dibuka langsung kebaca EditorViewModel ini — dua ViewModel ini instance-nya
+    // beda, jadi kalau map-nya lokal isinya nggak akan ketemu. Lihat CRITICAL 3.
     val editorContents: MutableMap<String, String> = ConcurrentHashMap()
+
+    // Fase 4 live preview: EditorViewModel publish tick tiap isi file web berubah;
+    // PreviewViewModel collect → compose ulang (debounce 350ms di sana).
+    private val previewTickSeq = AtomicLong(0)
+    val previewTick = MutableStateFlow(PreviewTick(0, ""))
+
+    fun publishPreviewTick(uri: String) {
+        previewTick.value = PreviewTick(previewTickSeq.incrementAndGet(), uri)
+    }
 }

@@ -101,4 +101,27 @@ class FileKindResolverTest {
         assertFalse(hiddenFiles.isHidden("file.txt"))
         assertFalse(hiddenFiles.isHidden("a.b.c"))
     }
+
+    // --- isWebFile (top-level) ---
+
+    @Test
+    fun `isWebFile mendeteksi ekstensi web`() {
+        assertTrue(isWebFile("content://x/yy/index.html"))
+        assertTrue(isWebFile("content://x/yy/style.css"))
+        assertTrue(isWebFile("content://x/yy/main.js"))
+    }
+
+    @Test
+    fun `isWebFile case insensitive`() {
+        assertTrue(isWebFile("INDEX.HTML"))
+        assertTrue(isWebFile("Style.CSS"))
+    }
+
+    @Test
+    fun `isWebFile uri null dan non-web false`() {
+        assertFalse(isWebFile(null))
+        assertFalse(isWebFile("notes.txt"))
+        assertFalse(isWebFile("Main.kt"))
+        assertFalse(isWebFile("tanpa-ekstensi"))
+    }
 }

@@ -123,6 +123,15 @@ class FileKindResolver {
     }
 }
 
+// Sumber tunggal "uri ini preview-able?" — dulu duplikat identik di EditorViewModel dan
+// PreviewViewModel. Kontrak sengaja sama dengan versi lama: ambil substring setelah titik
+// terakhir lalu lowercase; uri tanpa query/fragment (SAF content:// memang tidak membawanya).
+fun isWebFile(uri: String?): Boolean {
+    if (uri == null) return false
+    val ext = uri.substringAfterLast(".", "").lowercase()
+    return ext in setOf("html", "css", "js")
+}
+
 class FileOps {
     data class UndoPayload(val uri: Uri, val oldName: String, val content: String?)
 }
