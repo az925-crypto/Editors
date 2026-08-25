@@ -18,6 +18,15 @@
 - `FilesScreen` + `FilesViewModel` real SAF (ganti dummy `loadDummy()`): `OpenDocumentTree` launcher + `takePersistablePermission` + `buildChildDocumentsUriUsingTree` + breadcrumb dinamis 38dp + `SafDialog` blocking + recents `SharedPreferences` (StringSet `uri|name|kind`) + `SearchSlot` debounce 200ms + `PermBanner` — CI hijau `56077c0`
 - `EditorScreen` Sora: `AndroidView(CodeEditor)` + `TextMateColorScheme.create(ThemeRegistry)` + `TextMateLanguage.create(scope)` + theme `retro-lcd.json` + grammars `html/css/js/kt/py/json` di `assets/textmate/` + `SoraThemeMapper` — CI hijau
 - `docs/qa-manual.md` checklist 8 poin
+- **Hardening round (pre-80841fd, verified saat re-audit):** `EditorsApp.onCreate` preload TextMate via `Dispatchers.IO` (fix freeze main thread 400-1200ms) + `FilesViewModel` pathStack main-thread-only & `loadChildren` Job+generasi (fix race breadcrumb) + `AppContainer.editorContents` shared map (fix handoff `openFile`→tab kosong) + `SafFileSystemImpl.readText` size guard 2MB (fix OOM) + `cursor.use{}` (fix leak) + `parseRecentEntry` first/last `|` split (fix delimiter di nama file) + `AndroidManifest allowBackup="false"`
+- **Re-audit `80841fd` — Bug (1 Critical + 2 Medium), semua fixed:**
+  - `EditorScreen.kt` flush debounce saat pindah tab nimpa file salah → sekarang flush nyasar `leavingUri` eksplisit (URI tab yang ditinggalkan), bukan `activeUri` implisit yang sudah keburu pindah
+  - `FilesViewModel.navigateToSegment` guard `index < 0` (sebelumnya cuma cek batas atas → crash `IndexOutOfBoundsException`)
+  - `EditorViewModel` saveStatus race → tiap update `saveStatus`/`content` sekarang dijaga cek `activeUri == targetUri` lewat overload `onContentChange(uri, content)` eksplisit
+- **Re-audit `80841fd` — Performance (3 Low), semua fixed:**
+  - `pendingChangeJob` diganti dari `mutableStateOf<Job?>` ke `JobHolder` biasa (bukan Compose State) — sebelumnya tiap assign Job baru (nyaris tiap keystroke) memicu `AndroidView.update{}` re-invoke tanpa perlu
+  - `appliedScope.value` di `EditorScreen` sekarang cuma ditandai "applied" SETELAH `setEditorLanguage` sukses — sebelumnya ditandai duluan sebelum try, jadi kalau race sama preload TextMate (paling gampang kena tab pertama cold start) hasilnya macet permanen plain-text tanpa retry
+  - `FilesScreen` filter list diganti dari `derivedStateOf { vm.filteredEntries(stateHolder.value) }` (masih baca whole state object, recompute tiap field apa pun berubah) ke `remember(state.entries, state.showHidden, state.query) { ... }` (recompute cuma kalau 3 field itu beneran berubah)
 
 ## CI Fix Loop (14 commit)
 1. `c787705` remove `kotlin-android` (AGP 9 built-in)
@@ -37,11 +46,14 @@
 15. `56077c0` fix `api` expose sora deps (supertype classpath) → CI hijau `32819652242`
 
 ## Belum Done — Review BLOCKING (Fase 2/3 hardening sebelum v0.1.2)
-- **Performance BLOCKING yes (1 Critical):** `EditorEngine.initTextMate()` synchronous di main thread (`AndroidView.factory`) → freeze 400-1200ms SD680. Saran: preload di `EditorsApp.onCreate` via `Dispatchers.IO` + `LaunchedEffect`.
-- **Bug BLOCKING yes (3 Critical):** race `pathStack`/`loadChildren` tanpa generasi (rapid tap breadcrumb → entries salah) + `pathStack` MutableList tanpa sync di IO/main → `ConcurrentModificationException` + handoff `FilesViewModel.openFile` bypass `EditorViewModel.contentMap` → tab kosong + `readText` tanpa batas → OOM 30MB.
-- **Security BLOCKING no (6 Medium):** over-grant `READ|WRITE`, `isPermissionValid` cek read saja, cursor leak `use{}` missing, delimiter `|` di recents, `allowBackup="true"`, `PreviewScreen` bypass `PreviewWebViewFactory` hardening.
-- **Next hardening:** `allowBackup="false"`, `cursor.use{}`, `split("|", limit=3)`, `loadChildren` generasi + `currentUri` check, shared `editorContents` di `AppContainer`, `readText` size guard 2MB, `EditorScreen` `TextMateLanguage.create` cache + `derivedStateOf` untuk `filteredEntries`, `SimpleDateFormat` static.
-- **Fase 4 — core-preview real:** `PreviewComposer` inline css/js beneran + `ConsoleBridge` `@JavascriptInterface` JSON + debounce 350ms + `UrlBar`/`ConsolePanel` 40dp↔40% + `WebView` `loadDataWithBaseURL` (stub belum di-wire, factory sudah hardened)
+- **Performance BLOCKING no** — semua fixed (lihat `## Done`), termasuk 3 Low dari re-audit `80841fd`.
+- **Bug BLOCKING no** — semua fixed (lihat `## Done`), termasuk 1 Critical + 2 Medium dari re-audit `80841fd`.
+- **Security BLOCKING no (3 Medium tersisa dari 6):**
+  - `TreeAccess.takePersistablePermission` masih over-grant `FLAG_GRANT_READ_URI_PERMISSION or FLAG_GRANT_WRITE_URI_PERMISSION` sekaligus di semua kondisi
+  - `TreeAccess.isPermissionValid` cek `isReadPermission` doang, tidak cek write permission-nya juga
+  - `PreviewScreen.kt:78` masih instansiasi `WebView(ctx)` langsung, belum lewat `PreviewWebViewFactory` yang sudah di-hardening
+  - ✅ sudah fixed: cursor leak `use{}`, delimiter `|` di recents, `allowBackup="false"`
+- **Fase 4 — core-preview real:** `PreviewComposer` inline css/js beneran + `ConsoleBridge` `@JavascriptInterface` JSON + debounce 350ms + `UrlBar`/`ConsolePanel` 40dp↔40% + `WebView` `loadDataWithBaseURL` lewat `PreviewWebViewFactory` (stub belum di-wire, sekalian bereskan bypass Security di atas)
 - **Lain:** font bundling `res/font` (M PLUS Rounded 1c / IBM Plex Sans JP / DotGothic16), `maintainability-reviewer` (non-blocking), `README` final, `release v0.1.2` tag + APK
 
 ## Artifact
@@ -49,6 +61,7 @@
 - Release APK: `v0.1.1` hijau di `Releases` (`zaaam-editors-0.1.1.apk`, run `32814065578`, fallback debug signing) — `v0.1.2` pending setelah fix BLOCKING
 
 ## Next Session
-1. Fix loop BLOCKING: `FilesViewModel` pathStack main-only + `loadChildren` Job+generasi + `AppContainer.editorContents` shared + `SafFileSystemImpl.readText` 2MB guard + `EditorsApp` preload TextMate IO + `AndroidManifest allowBackup=false` + `cursor.use`
-2. Re-run `security`/`bug`/`performance` reviewer sampai `BLOCKING: no`
-3. `maintainability-reviewer` + `docs` + bump `0.1.2` + `git tag v0.1.2` → `gh release create` (workflow `workflow_dispatch` siap)
+1. Bereskan 3 Medium Security tersisa: scope grant `TreeAccess` (read-only vs read+write sesuai kebutuhan), `isPermissionValid` cek write juga, wire `PreviewScreen` ke `PreviewWebViewFactory`
+2. Re-run `security` reviewer sampai `BLOCKING: no` penuh (Performance & Bug sudah `no` sejak re-audit `80841fd`)
+3. Fase 4 — wire `core-preview` real (`PreviewComposer`, `ConsoleBridge`, debounce 350ms)
+4. `maintainability-reviewer` + `docs` + bump `0.1.2` + `git tag v0.1.2` → `gh release create` (workflow `workflow_dispatch` siap)

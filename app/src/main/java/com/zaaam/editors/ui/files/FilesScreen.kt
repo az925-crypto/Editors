@@ -26,7 +26,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -55,10 +54,23 @@ fun FilesScreen(container: AppContainer) {
     val stateHolder = vm.uiState.collectAsState()
     val state by stateHolder
 
-    // MEDIUM: derivedStateOf supaya filter cuma dihitung ulang kalau hasilnya beneran beda,
-    // bukan setiap kali FilesUiState berubah (mis. isLoading toggle) yang sebelumnya bikin
-    // filteredEntries() jalan tiap recompose dan drop frame di list panjang.
-    val filtered by remember { derivedStateOf { vm.filteredEntries(stateHolder.value) } }
+    // MEDIUM: filter cuma dihitung ulang kalau hasilnya beneran beda, bukan setiap kali
+    // FilesUiState berubah (mis. isLoading toggle) yang sebelumnya bikin filteredEntries()
+    // jalan tiap recompose dan drop frame di list panjang.
+    //
+    // LOW FIX (80841fd re-audit): implementasi lama pakai
+    // `derivedStateOf { vm.filteredEntries(stateHolder.value) }` — tapi karena blok itu
+    // membaca stateHolder.value (satu State<FilesUiState> utuh), Compose men-tracking
+    // dependency-nya di level OBJEK FilesUiState itu sendiri, bukan field-nya. Tiap
+    // _uiState.update{} bikin instance FilesUiState baru — termasuk untuk field yang sama
+    // sekali tidak memengaruhi hasil filter (isLoading, permDenied, safError, dst) — jadi
+    // derivedStateOf tetap menghitung ulang filteredEntries() di SETIAP update state, persis
+    // seperti sebelum dikasih derivedStateOf. Ganti ke `remember(keys)` dengan key eksplisit
+    // field yang relevan (entries/showHidden/query) supaya recompute HANYA terjadi kalau
+    // salah satu dari tiga itu beneran berubah nilainya.
+    val filtered = remember(state.entries, state.showHidden, state.query) {
+        vm.filteredEntries(state)
+    }
 
     val picker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()

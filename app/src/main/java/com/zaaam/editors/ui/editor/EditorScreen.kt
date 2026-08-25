@@ -45,6 +45,13 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+// LOW FIX (80841fd re-audit): holder biasa (bukan Compose State) untuk referensi Job debounce
+// yang berubah nyaris tiap keystroke — lihat catatan di pemakaiannya di bawah. Nama field
+// tetap `.value` supaya semua call site pendingChangeJob.value tidak perlu diubah.
+private class JobHolder {
+    var value: Job? = null
+}
+
 @Composable
 fun EditorScreen(container: AppContainer) {
     val vm: EditorViewModel = viewModel { EditorViewModel(container) }
@@ -101,19 +108,25 @@ fun EditorScreen(container: AppContainer) {
         val lastAppliedContentUri = remember { mutableStateOf<String?>(null) }
         val editorRef = remember { mutableStateOf<EditorEngine?>(null) }
 
-        // MEDIUM: debounce pengiriman perubahan konten dari tiap keystroke ke ViewModel supaya
-        // tidak toString() copy seluruh buffer di setiap event ketikan (double-copy OOM risk).
-        val pendingChangeJob = remember { mutableStateOf<Job?>(null) }
+        // LOW FIX (80841fd re-audit): sebelumnya pakai mutableStateOf<Job?>, jadi tiap kali Job
+        // baru di-assign (nyaris tiap keystroke, karena event dibatalkan+dibuat ulang tiap
+        // ContentChangeEvent) itu tercatat sebagai state read di dalam AndroidView.update{} —
+        // bikin blok update itu di-invoke ulang oleh Compose walau activeUri/content tidak
+        // berubah sama sekali. pendingChangeJob murni referensi imperatif dipakai lintas-lambda
+        // (factory & update & onDispose), bukan sesuatu yang perlu memicu recomposition/update
+        // kalau berubah — jadi cukup pakai holder biasa (bukan Compose State).
+        val pendingChangeJob = remember { JobHolder() }
         val coroutineScope = rememberCoroutineScope()
 
         DisposableEffect(Unit) {
             onDispose {
                 // Kalau layar ini dibongkar sebelum debounce sempat jalan, flush dulu biar
-                // ketikan terakhir user tidak hilang.
+                // ketikan terakhir user tidak hilang. Sasar URI eksplisit (tab yang lagi
+                // ditampilkan editor saat itu), bukan activeUri implisit dari ViewModel.
                 pendingChangeJob.value?.let { job ->
                     if (job.isActive) {
                         job.cancel()
-                        editorRef.value?.let { ed -> vm.onContentChange(ed.text.toString()) }
+                        editorRef.value?.let { ed -> vm.onContentChange(lastAppliedContentUri.value, ed.text.toString()) }
                     }
                 }
             }
@@ -155,12 +168,18 @@ fun EditorScreen(container: AppContainer) {
             },
             update = { editor ->
                 if (activeUri != lastAppliedContentUri.value) {
-                    // Pindah tab: flush dulu perubahan yang masih ditunda (debounce) dari tab
-                    // sebelumnya sebelum bufernya ditimpa oleh setText di bawah.
+                    // CRITICAL FIX (80841fd re-audit): pada titik ini state.activeUri SUDAH
+                    // pindah ke tab baru (B), tapi editor.text di bawah masih isi tab lama (A)
+                    // karena setText(content) baru dipanggil setelah blok ini. Kalau flush
+                    // pakai vm.onContentChange(text) yang lama, ViewModel baca activeUri-nya
+                    // sendiri (sudah B) lalu nulis teks A ke contentMap[B] — korupsi antar-tab.
+                    // Fix: sasar URI tab yang DITINGGALKAN secara eksplisit — yaitu
+                    // lastAppliedContentUri.value, sebelum baris ini menimpanya jadi activeUri.
+                    val leavingUri = lastAppliedContentUri.value
                     pendingChangeJob.value?.let { job ->
                         if (job.isActive) {
                             job.cancel()
-                            vm.onContentChange(editor.text.toString())
+                            vm.onContentChange(leavingUri, editor.text.toString())
                         }
                     }
                     lastAppliedContentUri.value = activeUri
@@ -169,12 +188,23 @@ fun EditorScreen(container: AppContainer) {
                     }
                 }
                 if (activeUri != null && appliedScope.value != activeUri) {
-                    appliedScope.value = activeUri
+                    // LOW FIX (80841fd re-audit): sebelumnya appliedScope.value ditandai
+                    // "applied" SEBELUM try — jadi kalau TextMate registry belum kelar preload
+                    // (race dengan EditorsApp.onCreate, paling gampang kena di tab pertama waktu
+                    // cold start), setEditorLanguage gagal & editor fallback ke plain text, tapi
+                    // guard di atas sudah kepalang bilang "sudah diterapkan" sehingga tidak
+                    // pernah dicoba ulang — file itu macet tanpa highlight sampai tab ditutup &
+                    // dibuka lagi. Sekarang appliedScope.value cuma di-set SETELAH sukses, jadi
+                    // kalau gagal, update berikutnya (recomposition apa pun) akan otomatis coba
+                    // lagi sampai berhasil.
                     try {
                         val scope = languageResolver.resolve(activeUri)
                         val language = languageCache.getOrPut(scope) { TextMateLanguage.create(scope, true) }
                         editor.setEditorLanguage(language)
+                        appliedScope.value = activeUri
                     } catch (_: Exception) {
+                        // Belum siap — biarkan appliedScope.value beda dari activeUri supaya
+                        // di-retry, bukan macet permanen di plain text.
                     }
                 }
             }

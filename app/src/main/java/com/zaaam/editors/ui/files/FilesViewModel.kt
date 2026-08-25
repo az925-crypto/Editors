@@ -141,7 +141,9 @@ class FilesViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     fun navigateToSegment(index: Int) {
-        if (index >= pathStack.size) return
+        // MEDIUM FIX (80841fd re-audit): index < 0 (mis. indexOf yang gagal match) sebelumnya
+        // lolos guard lalu pathStack[-1] -> IndexOutOfBoundsException crash.
+        if (index < 0 || index >= pathStack.size) return
         val uri = pathStack[index]
         pathStack.subList(index + 1, pathStack.size).clear()
         _uiState.update {

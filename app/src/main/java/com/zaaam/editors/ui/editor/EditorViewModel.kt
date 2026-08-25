@@ -65,18 +65,38 @@ class EditorViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     fun onContentChange(newContent: String) {
-        val uri = _uiState.value.activeUri ?: return
-        contentMap[uri] = newContent
-        container.editorSession.markDirty(uri, true)
-        _uiState.update { it.copy(content = newContent, saveStatus = SaveStatus.Saving) }
+        onContentChange(_uiState.value.activeUri, newContent)
+    }
+
+    // CRITICAL/MEDIUM FIX (80841fd re-audit): sekarang menerima `uri` eksplisit, bukan cuma
+    // implisit lewat _uiState.value.activeUri. Caller (EditorScreen) yang flush debounce saat
+    // pindah tab HARUS bisa nyasar URI tab yang sedang ditinggalkan, karena pada saat flush itu
+    // jalan, activeUri di state sudah keburu pindah ke tab baru — kalau dibaca implisit di sini,
+    // konten tab lama ketulis ke slot tab baru (EditorScreen.kt:163 bug).
+    //
+    // Sekalian membenahi bug saveStatus (EditorViewModel.kt:73 lama): saveJob yang dijadwalkan
+    // untuk tab A tidak boleh menimpa saveStatus kalau user sudah pindah ke tab B sebelum delay
+    // 900ms/2000ms selesai — makanya tiap update UI state di bawah dijaga dengan cek
+    // `_uiState.value.activeUri == uri` dulu.
+    fun onContentChange(uri: String?, newContent: String) {
+        val targetUri = uri ?: return
+        contentMap[targetUri] = newContent
+        container.editorSession.markDirty(targetUri, true)
+        if (_uiState.value.activeUri == targetUri) {
+            _uiState.update { it.copy(content = newContent, saveStatus = SaveStatus.Saving) }
+        }
         saveJob?.cancel()
         saveJob = viewModelScope.launch {
             delay(900)
-            container.editorSession.markSaved(uri)
+            container.editorSession.markSaved(targetUri)
             val time = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
-            _uiState.update { it.copy(saveStatus = SaveStatus.Saved(time)) }
-            delay(2000)
-            _uiState.update { it.copy(saveStatus = SaveStatus.Idle) }
+            if (_uiState.value.activeUri == targetUri) {
+                _uiState.update { it.copy(saveStatus = SaveStatus.Saved(time)) }
+                delay(2000)
+                if (_uiState.value.activeUri == targetUri) {
+                    _uiState.update { it.copy(saveStatus = SaveStatus.Idle) }
+                }
+            }
         }
     }
 
