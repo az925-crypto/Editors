@@ -76,6 +76,7 @@ dependencies {
     implementation(project(":core-fs"))
     implementation(project(":core-editor"))
     implementation(project(":core-preview"))
+    implementation(project(":core-tools"))
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

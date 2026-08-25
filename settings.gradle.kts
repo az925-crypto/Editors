@@ -25,4 +25,5 @@ include(":app")
 include(":core-fs")
 include(":core-editor")
 include(":core-preview")
+include(":core-tools")
 
