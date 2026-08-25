@@ -147,7 +147,7 @@ class AutosaveCoordinatorTest {
     }
 
     @Test
-    fun `tulis berhasil mengemit succeeded dengan uri dan konten`() = runTest {
+    fun `tulis berhasil mengemit succeeded dengan uri`() = runTest {
         val events = mutableListOf<AutosaveCoordinator.Event>()
         val coord = AutosaveCoordinator(
             scope = backgroundScope,
@@ -161,7 +161,7 @@ class AutosaveCoordinatorTest {
         coord.onChange("uri-a", "isi")
         advanceTimeBy(AUTOSAVE_DEBOUNCE_MS + 10)
         runCurrent()
-        assertEquals(listOf<AutosaveCoordinator.Event>(AutosaveCoordinator.Event.Succeeded("uri-a", "isi")), events)
+        assertEquals(listOf<AutosaveCoordinator.Event>(AutosaveCoordinator.Event.Succeeded("uri-a")), events)
     }
 
     @Test

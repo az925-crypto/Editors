@@ -36,7 +36,7 @@ internal class AutosaveCoordinator(
     private val isStillCurrent: (uri: String, content: String) -> Boolean
 ) {
     sealed interface Event {
-        data class Succeeded(val uri: String, val content: String) : Event
+        data class Succeeded(val uri: String) : Event
         data class Failed(val uri: String) : Event
     }
 
@@ -59,7 +59,7 @@ internal class AutosaveCoordinator(
             }
             when (result) {
                 is FsResult.Success ->
-                    if (isStillCurrent(uri, content)) _events.emit(Event.Succeeded(uri, content))
+                    if (isStillCurrent(uri, content)) _events.emit(Event.Succeeded(uri))
                 is FsResult.Error -> _events.emit(Event.Failed(uri))
             }
         }
