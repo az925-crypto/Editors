@@ -58,8 +58,6 @@ internal fun replaceLiteral(text: String, from: String, to: String, ignoreCase: 
     return ReplaceOutcome(out.toString(), count)
 }
 
-data class FileFindReport(val node: ToolNode, val outcome: FindOutcome?)
-
 sealed interface BatchReplaceSummary {
     data class Success(val replacedCount: Int) : BatchReplaceSummary
     data object ChangedSkipped : BatchReplaceSummary
