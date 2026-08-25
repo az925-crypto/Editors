@@ -87,7 +87,15 @@ class FilesViewModel(private val container: AppContainer) : ViewModel() {
         viewModelScope.launch {
             when (val result = withContext(Dispatchers.IO) { container.treeAccess.takePersistablePermission(uri) }) {
                 is FsResult.Success -> {
-                    container.prefs.edit().putString("saf_tree_uri", uri.toString()).apply()
+                    // MEDIUM FIX (review): persist uri hanya kalau read+write benar-benar
+                    // ter-persist. Grant read-only hasil fallback per-flag memang bisa lanjut
+                    // dipakai sesi ini, tapi kalau ikut disimpan, isPermissionValid (yang butuh
+                    // read+write untuk autosave) akan gagal tiap cold start — dialog SAF muncul
+                    // berulang tanpa pernah bisa restore.
+                    val restorable = withContext(Dispatchers.IO) { container.treeAccess.isPermissionValid(uri) }
+                    if (restorable) {
+                        container.prefs.edit().putString("saf_tree_uri", uri.toString()).apply()
+                    }
                     // Main thread saja.
                     pathStack.clear()
                     pathStack.add(uri)

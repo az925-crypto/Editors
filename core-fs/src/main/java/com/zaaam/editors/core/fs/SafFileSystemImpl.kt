@@ -5,6 +5,27 @@ import android.net.Uri
 import android.provider.DocumentsContract
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.nio.ByteBuffer
+import java.nio.charset.CharacterCodingException
+import java.nio.charset.CodingErrorAction
+
+// CRITICAL FIX (review): guard "boleh dibuka sebagai teks" — NUL byte hampir selalu tanda
+// biner, dan byte sequence yang tidak valid UTF-8 berarti decode akan menghasilkan replacement
+// char (mangling). File seperti ini DITOLAK sebelum masuk editor: kalau sampai dibuka lalu
+// diedit, autosave real akan menulis balik hasil mangling dan merusak file permanen di disk.
+// INTERNAL: diekspos untuk unit test (BinaryGuardTest).
+internal fun isUsableAsText(bytes: ByteArray): Boolean {
+    if (bytes.indexOf(0.toByte()) >= 0) return false
+    return try {
+        Charsets.UTF_8.newDecoder()
+            .onMalformedInput(CodingErrorAction.REPORT)
+            .onUnmappableCharacter(CodingErrorAction.REPORT)
+            .decode(ByteBuffer.wrap(bytes))
+        true
+    } catch (_: CharacterCodingException) {
+        false
+    }
+}
 
 class SafFileSystemImpl(private val resolver: ContentResolver) : SafFileSystem {
 
@@ -65,7 +86,11 @@ class SafFileSystemImpl(private val resolver: ContentResolver) : SafFileSystem {
                 // jangan baca buta — baca streaming berbatas: stop di MAX+1 byte lalu tolak.
                 // Setara readNBytes(MAX+1), tapi loop manual karena readNBytes baru ada di API 33
                 // sedangkan minSdk 26.
-                FsResult.Success(readBounded(ins, MAX_TEXT_FILE_BYTES))
+                val bytes = readBounded(ins, MAX_TEXT_FILE_BYTES)
+                if (!isUsableAsText(bytes)) {
+                    return@use FsResult.Error(Exception("File bukan teks — tidak dibuka di editor"))
+                }
+                FsResult.Success(String(bytes, Charsets.UTF_8))
             }
         } catch (e: Exception) {
             FsResult.Error(e)
@@ -74,7 +99,7 @@ class SafFileSystemImpl(private val resolver: ContentResolver) : SafFileSystem {
 
     // Bounded read setara InputStream.readNBytes(limit+1): melempar Exception begitu total
     // byte melewati batas, supaya file raksasa tidak pernah termuat utuh ke memori.
-    private fun readBounded(stream: java.io.InputStream, limitBytes: Long): String {
+    private fun readBounded(stream: java.io.InputStream, limitBytes: Long): ByteArray {
         val out = java.io.ByteArrayOutputStream()
         val buf = ByteArray(64 * 1024)
         var total = 0L
@@ -87,7 +112,7 @@ class SafFileSystemImpl(private val resolver: ContentResolver) : SafFileSystem {
             }
             out.write(buf, 0, n)
         }
-        return out.toString("UTF-8")
+        return out.toByteArray()
     }
 
     private fun querySize(uri: Uri): Long? {

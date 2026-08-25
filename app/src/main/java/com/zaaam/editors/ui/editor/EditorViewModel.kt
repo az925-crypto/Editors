@@ -13,10 +13,13 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 
 data class EditorUiState(
     val tabs: List<TabState> = emptyList(),
@@ -49,6 +52,12 @@ class EditorViewModel(private val container: AppContainer) : ViewModel() {
     // tab lain yang belum jalan, bikin LED "Menyimpan…" nyangkut permanen. Sekarang satu
     // Job per URI supaya debounce/autosave tiap tab independen.
     private val saveJobs = mutableMapOf<String, Job>()
+
+    // SECURITY FIX (review): job lama yang sudah lewat delay sengaja TIDAK di-cancel lagi
+    // (cancel mid-write = file bisa kepotong di tengah), tapi urutan tetap dijamin — Mutex
+    // per-URI bikin write yang lebih baru SELALU mendarat terakhir. Entry dibiarkan hidup
+    // selama in-flight; jangan di-remove di closeTab (membuka celah dua writer paralel).
+    private val saveLocks = ConcurrentHashMap<String, Mutex>()
 
     init {
         viewModelScope.launch {
@@ -109,11 +118,12 @@ class EditorViewModel(private val container: AppContainer) : ViewModel() {
         saveJobs[targetUri] = viewModelScope.launch {
             delay(900)
             saveJobs.remove(targetUri)
-            when (
+            val writeResult = saveLocks.getOrPut(targetUri) { Mutex() }.withLock {
                 withContext(container.ioDispatcher) {
                     container.fileSystem.writeText(Uri.parse(targetUri), newContent)
                 }
-            ) {
+            }
+            when (writeResult) {
                 is FsResult.Success -> {
                     container.editorSession.markSaved(targetUri)
                     if (_uiState.value.activeUri == targetUri) {
