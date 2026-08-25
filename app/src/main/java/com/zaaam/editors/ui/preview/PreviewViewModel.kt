@@ -121,7 +121,9 @@ class PreviewViewModel(private val container: AppContainer) : ViewModel() {
             val composed = withContext(Dispatchers.Default) {
                 PreviewComposer.compose(docHtml, cssFragment, jsFragment)
             }
-            shownUri = uri
+            // Guard relevansi setelah resume dari Default — user bisa ganti dokumen selama
+            // compose jalan; hasil basi tidak boleh menimpa dokumen baru.
+            if (shownUri != uri || container.editorSession.activeTab != uri) return@launch
             _uiState.update { it.copy(html = composed, url = uri, isLoading = false) }
         }
     }

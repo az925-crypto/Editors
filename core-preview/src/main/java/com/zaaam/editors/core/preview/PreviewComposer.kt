@@ -31,10 +31,11 @@ object PreviewComposer {
     // Konten user yang mengandung penutup tag (apapun casing) bisa menutup wrapper
     // <style>/<script> lebih awal dan menyuntik markup/eksekusi di luar kendali,
     // jadi fragmen yang disuntikkan di-escape dulu dengan menyisipkan backslash.
-    // \s* menutup varian valid per HTML parser seperti "</style >" / "</STYLE\t>" —
-    // tanpa itu, file craft-an bisa lolos escape dan mengeksekusi JS di preview.
-    private val closeStyleTag = Regex("</\\s*style\\s*>", RegexOption.IGNORE_CASE)
-    private val closeScriptTag = Regex("</\\s*script\\s*>", RegexOption.IGNORE_CASE)
+    // \s* menutup varian valid per HTML parser seperti "</style >" / "</STYLE\t>"; [^>]*>
+    // menutup end-tag ber-atribute ("</script foo>") yang juga valid menutup elemen.
+    // \b mencegah over-match kata lain ("</scripts>" bukan penutup, tidak diescape).
+    private val closeStyleTag = Regex("</\\s*style\\b[^>]*>", RegexOption.IGNORE_CASE)
+    private val closeScriptTag = Regex("</\\s*script\\b[^>]*>", RegexOption.IGNORE_CASE)
 
     // Placeholder replace sengaja EXACT-STRING casing-sensitive — perilaku lama yang
     // dikunci PreviewComposerTest; jangan diubah jadi regex/case-insensitive.

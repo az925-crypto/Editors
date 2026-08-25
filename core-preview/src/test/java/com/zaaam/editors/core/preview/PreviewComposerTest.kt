@@ -221,4 +221,17 @@ class PreviewComposerTest {
         assertFalse(hasil2.contains("</style\t>"))
         assertTrue(hasil2.contains("<\\/style\t>"))
     }
+
+    @Test
+    fun `escape menutup end tag ber atribut dan tidak over-match kata lain`() {
+        // "</script foo>" valid menutup elemen script per HTML parser — wajib terescape.
+        val hasil = PreviewComposer.compose(htmlDenganPlaceholder(), null, "x(); </script foo>")
+        assertFalse(hasil.contains("</script foo>"))
+        assertTrue(hasil.contains("<\\/script foo>"))
+
+        // "</scripts>" bukan penutup elemen — konten user tidak boleh rusak.
+        val hasil2 = PreviewComposer.compose(htmlDenganPlaceholder(), "a::after{content:'</scripts>'}", null)
+        assertTrue(hasil2.contains("</scripts>"))
+        assertFalse(hasil2.contains("<\\/scripts>"))
+    }
 }
