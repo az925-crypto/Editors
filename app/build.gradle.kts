@@ -26,10 +26,13 @@ android {
 
     signingConfigs {
         create("config") {
-            storeFile = file(System.getenv("RELEASE_STORE_FILE") ?: "")
-            storePassword = System.getenv("RELEASE_STORE_PASS") ?: ""
-            keyAlias = System.getenv("RELEASE_KEY_ALIAS") ?: ""
-            keyPassword = System.getenv("RELEASE_KEY_PASS") ?: ""
+            val storeFilePath = System.getenv("RELEASE_STORE_FILE") ?: ""
+            if (storeFilePath.isNotBlank()) {
+                storeFile = file(storeFilePath)
+                storePassword = System.getenv("RELEASE_STORE_PASS") ?: ""
+                keyAlias = System.getenv("RELEASE_KEY_ALIAS") ?: ""
+                keyPassword = System.getenv("RELEASE_KEY_PASS") ?: ""
+            }
         }
     }
 
@@ -47,10 +50,6 @@ android {
             )
             signingConfig = signingConfigs.getByName("config")
         }
-    }
-
-    composeOptions {
-        kotlinCompilerExtensionVersion = "2.4.10"
     }
 
     compileOptions {
