@@ -1,67 +1,147 @@
-# Progress — zaaam/editors
+# Progress & Handoff — zaaam/editors
 
 **Tanggal:** 2026-08-25
-**Tag terakhir:** `v0.1.1` (commit `4383466`) — CI hijau (32814059540) + Release hijau (32814065578)
-**Branch:** `main` @ `56077c0` — https://github.com/az925-crypto/Editors.git
+**HEAD:** `37b9678` (main, pushed) — CI GREEN run `32837095359`
+**Repo:** https://github.com/az925-crypto/Editors.git
 **Package:** `com.zaaam.editors` — minSdk 26 / targetSdk 36 / compileSdk 36 / Kotlin 2.4.10 / AGP 9.3.0 / Gradle 9.5.0 / JDK 21
+**Tag terakhir:** `v0.1.1` (`4383466`) — Release workflow HIJAU (run `32814065578`, APK debug-signed di Releases)
 
-## Done
-- Mockup HTML full-app v3 "Zaurus di Meja Kerja" approved (2026-08-25) — live `http://127.0.0.1:8080/mockup/` — spec `docs/design-spec.md` v3
-- Git init + remote `az925-crypto/Editors` + `main` 17 commit
-- Gradle wrapper bootstrap dari `gradle/gradle` v9.5.0 raw
-- CI `.github/workflows/ci.yml` hijau: `assembleDebug` ✓ `testDebugUnitTest` ✓ `lintDebug` ✓ (run `32819652242` terbaru)
-- Theme minimal: `RetroTokens` (bone `#E8E3D5` / graphite `#26241F` / olive `#B8C24D` / lcd `#DDE8A0` on `#1A2010`), `colors.xml`, launcher adaptive `drawable/ic_launcher_background+foreground` + `mipmap-anydpi-v26`
-- App skeleton: `EditorsApp`, `MainActivity` (`RetroTheme { Text }`), `AppRoot` (`collectAsState` nav Files/Editor/Preview), `AppContainer` + `SharedPreferences` `zaaam_editors`
-- `core-fs` real: `SafFileSystemImpl` (DocumentsContract `buildChildDocumentsUriUsingTree` + `readText`/`writeText`/`mkdir`/`delete`) + `TreeAccess.takePersistableUriPermission` real + `isPermissionValid` + `HiddenFiles` + `FileKindResolver`/`FileOps` — fix rename return new URI + cursor leak noted
-- `core-editor` real: `EditorEngine` extends `CodeEditor` (Sora) + `SoraThemeMapper` (schemes.EditorColorScheme chrome overrides) + `LanguageResolver` — desugaring enabled (`desugar_jdk_libs:2.1.5`)
-- `core-preview` stub: `PreviewComposer`/`ConsoleEntry`/`PreviewWebViewFactory` (hardened) — belum di-wire
-- `FilesScreen` + `FilesViewModel` real SAF (ganti dummy `loadDummy()`): `OpenDocumentTree` launcher + `takePersistablePermission` + `buildChildDocumentsUriUsingTree` + breadcrumb dinamis 38dp + `SafDialog` blocking + recents `SharedPreferences` (StringSet `uri|name|kind`) + `SearchSlot` debounce 200ms + `PermBanner` — CI hijau `56077c0`
-- `EditorScreen` Sora: `AndroidView(CodeEditor)` + `TextMateColorScheme.create(ThemeRegistry)` + `TextMateLanguage.create(scope)` + theme `retro-lcd.json` + grammars `html/css/js/kt/py/json` di `assets/textmate/` + `SoraThemeMapper` — CI hijau
-- `docs/qa-manual.md` checklist 8 poin
-- **Hardening round (pre-80841fd, verified saat re-audit):** `EditorsApp.onCreate` preload TextMate via `Dispatchers.IO` (fix freeze main thread 400-1200ms) + `FilesViewModel` pathStack main-thread-only & `loadChildren` Job+generasi (fix race breadcrumb) + `AppContainer.editorContents` shared map (fix handoff `openFile`→tab kosong) + `SafFileSystemImpl.readText` size guard 2MB (fix OOM) + `cursor.use{}` (fix leak) + `parseRecentEntry` first/last `|` split (fix delimiter di nama file) + `AndroidManifest allowBackup="false"`
-- **Re-audit `80841fd` — Bug (1 Critical + 2 Medium), semua fixed:**
-  - `EditorScreen.kt` flush debounce saat pindah tab nimpa file salah → sekarang flush nyasar `leavingUri` eksplisit (URI tab yang ditinggalkan), bukan `activeUri` implisit yang sudah keburu pindah
-  - `FilesViewModel.navigateToSegment` guard `index < 0` (sebelumnya cuma cek batas atas → crash `IndexOutOfBoundsException`)
-  - `EditorViewModel` saveStatus race → tiap update `saveStatus`/`content` sekarang dijaga cek `activeUri == targetUri` lewat overload `onContentChange(uri, content)` eksplisit
-- **Re-audit `80841fd` — Performance (3 Low), semua fixed:**
-  - `pendingChangeJob` diganti dari `mutableStateOf<Job?>` ke `JobHolder` biasa (bukan Compose State) — sebelumnya tiap assign Job baru (nyaris tiap keystroke) memicu `AndroidView.update{}` re-invoke tanpa perlu
-  - `appliedScope.value` di `EditorScreen` sekarang cuma ditandai "applied" SETELAH `setEditorLanguage` sukses — sebelumnya ditandai duluan sebelum try, jadi kalau race sama preload TextMate (paling gampang kena tab pertama cold start) hasilnya macet permanen plain-text tanpa retry
-  - `FilesScreen` filter list diganti dari `derivedStateOf { vm.filteredEntries(stateHolder.value) }` (masih baca whole state object, recompute tiap field apa pun berubah) ke `remember(state.entries, state.showHidden, state.query) { ... }` (recompute cuma kalau 3 field itu beneran berubah)
+---
 
-## CI Fix Loop (14 commit)
-1. `c787705` remove `kotlin-android` (AGP 9 built-in)
-2. `e278acb` `kotlinOptions` → `kotlin { jvmToolchain(17) }`
-3. `ce00325` `signingConfigs` before `buildTypes`
-4. `8931384` conditional `storeFile`
-5. `8e499f2` remove `targetSdk` from library
-6. `e0ea599`/`d9f38f9`/`5e917b9` JitPack Sora → disable (JitPack timeout `Could not find ...` + `SocketTimeoutException`)
-7. `1debb03` EditText fallback
-8. `28443dd`→`4321284` `strings.xml` `&` → `&amp;` + corruption fix (`ET.parse` OK)
-9. `4313464` `FsResult` rename + `EditorEngine` fix
-10. `6457064` signing fallback debug + `colors.xml` + launcher + remove `windowLightNavigationBar` API27
-11. `4383466` fix `release.yml` secrets `env:` + `workflow_dispatch` + bump `0.1.1` → Release hijau `32814065578`
-12. `df17cb5` feat `FilesScreen` real SAF (6 files, `BackHandler` bug ditemukan)
-13. `86d682c` feat `Sora 0.23.6` TextMate + `retro-lcd.json` + `languages.json` + desugaring + fix `FilesScreen` back-handling
-14. `93ec18f` fix `EditorColorScheme` import `widget.schemes` + verified color IDs
-15. `56077c0` fix `api` expose sora deps (supertype classpath) → CI hijau `32819652242`
+## BACA INI DULU (untuk AI/user berikutnya)
 
-## Belum Done — Review BLOCKING (Fase 2/3 hardening sebelum v0.1.2)
-- **Performance BLOCKING no** — semua fixed (lihat `## Done`), termasuk 3 Low dari re-audit `80841fd`.
-- **Bug BLOCKING no** — semua fixed (lihat `## Done`), termasuk 1 Critical + 2 Medium dari re-audit `80841fd`.
-- **Security BLOCKING no (3 Medium tersisa dari 6):**
-  - `TreeAccess.takePersistablePermission` masih over-grant `FLAG_GRANT_READ_URI_PERMISSION or FLAG_GRANT_WRITE_URI_PERMISSION` sekaligus di semua kondisi
-  - `TreeAccess.isPermissionValid` cek `isReadPermission` doang, tidak cek write permission-nya juga
-  - `PreviewScreen.kt:78` masih instansiasi `WebView(ctx)` langsung, belum lewat `PreviewWebViewFactory` yang sudah di-hardening
-  - ✅ sudah fixed: cursor leak `use{}`, delimiter `|` di recents, `allowBackup="false"`
-- **Fase 4 — core-preview real:** `PreviewComposer` inline css/js beneran + `ConsoleBridge` `@JavascriptInterface` JSON + debounce 350ms + `UrlBar`/`ConsolePanel` 40dp↔40% + `WebView` `loadDataWithBaseURL` lewat `PreviewWebViewFactory` (stub belum di-wire, sekalian bereskan bypass Security di atas)
-- **Lain:** font bundling `res/font` (M PLUS Rounded 1c / IBM Plex Sans JP / DotGothic16), `maintainability-reviewer` (non-blocking), `README` final, `release v0.1.2` tag + APK
+1. **Build/test BERAT WAJIB lewat GitHub Actions CI** — JANGAN gradle lokal di Termux (instruksi user, notes.txt #1). Iterasi: edit → commit → `git push origin main` → `gh run list --limit 1` → kalau gagal `gh run view <id> --log-failed | grep "e: file"`.
+2. **Workflow wajib (AGENTS.md):** explore → planner (>1 file) → design (kalau sentuh UI) → build↔test loop sampai CI GREEN → migration-guard (n/a, belum ada Room) → security-reviewer + bug-reviewer + performance-reviewer PARALEL (semuanya BLOCKING, fix-loop sampai BLOCKING: no) → maintainability-reviewer (non-blocking) → docs → commit.
+3. **AGP 9 quirks (riwayat 15 fix):** jangan tambah plugin `kotlin-android` (built-in), jangan pakai `kotlinOptions{}` (pakai `kotlin { jvmToolchain(17) }`), library modules TANPA `targetSdk`, `signingConfigs` sebelum `buildTypes`.
+4. **JITPACK DILARANG** — riwayat timeout 3x sia-sia. Sora dari Maven Central: `io.github.Rosemoe.sora-editor:{editor,language-textmate}:0.23.6` (0.24.x hanya prerelease GitHub).
+5. **Sora API gotchas (sudah diverifikasi ke source 0.23.6):**
+   - `EditorColorScheme` ada di `io.github.rosemoe.sora.widget.schemes` (BUKAN `widget`)
+   - `IThemeSource` ada di `org.eclipse.tm4e.core.registry` (BUKAN package sora)
+   - `ThemeModel.setDark(true)` — `isDark` bukan field publik
+   - Setup pattern: `FileProviderRegistry.addFileProvider(AssetsFileResolver)` → `ThemeRegistry.loadTheme(ThemeModel(IThemeSource.fromInputStream(stream,path,null),"name"))` → `setTheme(name)` → `GrammarRegistry.loadGrammars("textmate/languages.json")` → `editor.setColorScheme(TextMateColorScheme.create(ThemeRegistry.getInstance()))`
+   - scope name di languages.json HARUS persis sama dengan `scopeName` di dalam tmLanguage.json (registry throw mismatch)
+6. **Desugaring WAJIB** untuk language-textmate dengan minSdk<33: sudah aktif (`isCoreLibraryDesugaringEnabled=true` + `desugar_jdk_libs:2.1.5` di app module).
+7. **core-editor expose sora via `api()` bukan `implementation`** — app butuh classpath supertype CodeEditor.
+8. **Keystore release belum ada** → APK release pakai fallback debug signing (by design dulu). Real keystore via `gh secret set RELEASE_KEYSTORE_B64` + RELEASE_STORE_PASS/KEY_ALIAS/KEY_PASS.
+9. **release.yml sudah fixed** (commit `4383466`): secrets via step `env:` (jangan `${{ secrets.* }}` langsung di `run:` = command injection risk; `secrets` context ilegal di step-level `if`), trigger `push: tags v*` + `workflow_dispatch`. Uji: bump versionName/versionCode → push tag `vX.Y.Z`.
+10. **User sering benerin sendiri via zip** (`~/git/Editors-main-fixed*.zip`, export GitHub tanpa `.github`/dotfiles). Cara apply: `unzip -d /tmp/opencode/x`, `diff -rq` vs working tree (exclude .git/.github/.gitignore/tmp-apk/ah.txt), review diff, copy file yang relevan, jangan overwrite `.github`.
 
-## Artifact
-- Debug APK: CI artifact `app-debug-apk` run `32819652242` (hijau terbaru, `gh run download`)
-- Release APK: `v0.1.1` hijau di `Releases` (`zaaam-editors-0.1.1.apk`, run `32814065578`, fallback debug signing) — `v0.1.2` pending setelah fix BLOCKING
+---
 
-## Next Session
-1. Bereskan 3 Medium Security tersisa: scope grant `TreeAccess` (read-only vs read+write sesuai kebutuhan), `isPermissionValid` cek write juga, wire `PreviewScreen` ke `PreviewWebViewFactory`
-2. Re-run `security` reviewer sampai `BLOCKING: no` penuh (Performance & Bug sudah `no` sejak re-audit `80841fd`)
-3. Fase 4 — wire `core-preview` real (`PreviewComposer`, `ConsoleBridge`, debounce 350ms)
-4. `maintainability-reviewer` + `docs` + bump `0.1.2` + `git tag v0.1.2` → `gh release create` (workflow `workflow_dispatch` siap)
+## STATE SEKARANG
+
+### Done (Fase 1-5 besar)
+- **Fase 1 infra:** CI hijau stabil (assembleDebug+testDebugUnitTest+lintDebug), release.yml fixed+hijau v0.1.1, theme RetroTokens, launcher adaptive, app shell nav Files/Editor/Preview.
+- **Fase 2 core-fs REAL:** `SafFileSystemImpl` (listChildren/readText/writeText/mkdir/rename/delete, cursor `use{}`, readText guard 2MB via querySize), `TreeAccess.takePersistableUriPermission/release/isPermissionValid` real, rename return new URI.
+- **Fase 2 UI real SAF:** `FilesViewModel` (OpenDocumentTree flow, pathStack main-only, loadJob cancel + generation guard, recents SharedPreferences parse first/last-pipe-safe, restore tree uri, breadcrumb segments) + `FilesScreen` (launcher, breadcrumb dinamis, skeleton 8 bar, banner denied, empty states S0-S4b, FileRow cartridge + tanggal real via top-level SimpleDateFormat) + `SafDialog` full spec §9.5 (scrim blocking, check rows, error banner, Pilih folder/Nanti).
+- **Fase 3 core-editor REAL:** `EditorEngine extends CodeEditor`, preload TextMate di `EditorsApp.onCreate` via `CoroutineScope(SupervisorJob()+Dispatchers.IO)` (idempotent @Synchronized), factory hanya createColorScheme+applyChromeOverrides, subscribeEvent ContentChangeEvent → debounce 200ms JobHolder + flush explicit-uri saat pindah tab/dispose, `lastAppliedContentUri` gate setText hanya saat pindah tab, `appliedScope` set-setelah-sukses (auto-retry highlight), languageCache per-scope. `SoraThemeMapper` chrome overrides (scrollbar/completion window/action window). Assets: `app/src/main/assets/textmate/` — themes/retro-lcd.json (VSCode format, palet LCD RetroTokens) + languages.json + 6 grammar custom minimal (html/css/js/kotlin/python/json).
+- **Fase 3 wiring:** `AppContainer.editorContents: ConcurrentHashMap` shared antara FilesViewModel (penulis, SEBELUM addTab) dan EditorViewModel (contentMap get() = editorContents). EditorScreen AndroidView(CodeEditor), save LED pill.
+- **Reviewer round 1+2:** security BLOCKING no; performance BLOCKING no (semua fix verified); bug-reviewer round 2 masih BLOCKING yes (lihat bawah).
+
+### ⚠️ PENDING FIX — bug-reviewer round 3 (VERIFIED REAL, bukan false positive)
+
+Semua sudah ditrace timeline, tinggal eksekusi. Setelah ini re-run bug-reviewer.
+
+**[Critical] Race debounce implicit-uri — `app/src/main/java/com/zaaam/editors/ui/editor/EditorScreen.kt:158-166`**
+Timeline korupsi: ketik di A t=0 → job delay(200) dibuat → switchTab(B) t=190 (activeUri=B) → job resume t=200 SEBELUM update{} cancel → baris 163 `vm.onContentChange(editor.text.toString())` implisit → contentMap[B] tertimpa teks A.
+Fix: capture uri + text guard saat event:
+```kotlin
+editor.subscribeEvent(ContentChangeEvent::class.java) { event, _ ->
+    if (event.action != ContentChangeEvent.ACTION_SET_NEW_TEXT) {
+        val sourceUri = lastAppliedContentUri.value
+        pendingChangeJob.value?.cancel()
+        pendingChangeJob.value = coroutineScope.launch {
+            delay(200)
+            if (lastAppliedContentUri.value == sourceUri) {
+                vm.onContentChange(sourceUri, editor.text.toString())
+            }
+        }
+    }
+}
+```
+Guard `lastAppliedContentUri == sourceUri`: kalau update{} sudah ganti tab, skip (flush leavingUri sudah handle); kalau job menang race, tulis eksplisit ke A (onContentChange(uri,...) tidak lagi butuh activeUri match untuk contentMap).
+
+**[Medium] saveJob single global — `app/src/main/java/com/zaaam/editors/ui/editor/EditorViewModel.kt:~88`**
+`saveJob?.cancel()` tiap keystroke membunuh markSaved(A) yang belum jalan → dirty LED A nyangkut. Fix: per-uri:
+```kotlin
+private val saveJobs = mutableMapOf<String, Job>()
+// di onContentChange(uri, newContent):
+saveJobs.remove(targetUri)?.cancel()
+saveJobs[targetUri] = viewModelScope.launch {
+    delay(900)
+    container.editorSession.markSaved(targetUri)
+    saveJobs.remove(targetUri)
+    ...update saveStatus dengan guard activeUri==targetUri...
+    delay(2000)
+    if (_uiState.value.activeUri == targetUri) { ...Idle }
+}
+```
+
+**[Medium] Collector tabs tidak reset saveStatus — `EditorViewModel.kt:43`**
+Buka file baru dari Files → addTab → collector update tanpa reset → "Menyimpan…" milik tab lama nempel di tab baru. Fix di init collector:
+```kotlin
+_uiState.update {
+    it.copy(
+        tabs = tabs, activeUri = active, content = content,
+        saveStatus = if (it.activeUri != active) SaveStatus.Idle else it.saveStatus
+    )
+}
+```
+
+**[Low] closeTab resurrect map entry**
+closeTab hapus contentMap[uri], lalu flush onDispose/update nulis balik. Fix guard di awal `onContentChange(uri, newContent)`:
+```kotlin
+if (_uiState.value.tabs.none { it.uri == targetUri }) return
+```
+
+### Security Medium OPEN (round 1, belum difix)
+- Over-grant: `takePersistableUriPermission(READ or WRITE)` selalu minta dua-duanya (`core-fs/FileKindResolver.kt:36`). Ideal: cek flags yang benar-benar di-grant dari intent result.
+- `isPermissionValid` cuma cek `isReadPermission` (`FileKindResolver.kt:60`) — write revoke tak terdeteksi, save gagal diam-diam.
+- `PreviewScreen` bikin WebView sendiri tanpa hardening (`ui/preview/PreviewScreen.kt:78`) padahal `PreviewWebViewFactory` sudah hardened (allowFileAccess=false etc + safeBrowsing). Fase 4 akan rombak — samakan saat itu.
+- Catatan mitigasi existing: no INTERNET permission, allowBackup sudah false, MODE_PRIVATE ok.
+
+### Backlog lain (urutan prioritas)
+1. **Save FAKE (penting!):** `EditorViewModel.onContentChange` hanya markDirty/markSaved lokal — TIDAK PERNAH panggil `fileSystem.writeText`. Edit hilang saat restart app. Implement autosave real via debounce + `container.fileSystem.writeText(Uri.parse(uri), content)` di IO, LED status dari FsResult.
+2. **BackHandler hilang:** `navigateUp()` dead code — system Back keluar app, harusnya naik folder. Tambah `BackHandler(enabled = state.pathSegments.size > 1) { vm.navigateUp() }` di FilesScreen (import androidx.activity.compose.BackHandler — hati-hati versi OnBackPressedCallback yang dulu gagal compile; BackHandler composable lebih aman).
+3. **Fallback language `text.plain` tidak terdaftar** di assets/textmate/languages.json → txt/md keep highlight file sebelumnya (catch di setEditorLanguage tidak reset). Fix: daftarkan plain grammar atau `editor.setEditorLanguage(null)` di catch.
+4. **openRecent tidak cek BINARY** (mitigated: binary tak pernah masuk recents karena openFile early-return sebelum upsertRecent; stale prefs bisa lolos — tambah guard kind==BINARY → addTab binary=true tanpa readText).
+5. **listError tidak pernah ditampilkan** di FilesScreen (state ada, UI tidak baca).
+6. **Fase 4 preview real:** wire `PreviewComposer` (inline css/js, escape `</script>`) + `PreviewWebViewFactory` hardened + ConsoleBridge @JavascriptInterface + debounce 350ms + UrlBar/ConsolePanel 40dp↔40%.
+7. **Fonts bundling:** dir `res/font` kosong — M PLUS Rounded 1c / IBM Plex Sans JP / DotGothic16 / JetBrains Mono.
+8. **maintainability-reviewer** belum pernah jalan (wajib sebelum docs final per AGENTS.md).
+9. **Release v0.1.2:** setelah semua fix → bump versionCode=3/versionName=0.1.2 → commit → tag v0.1.2 → push → verify Release workflow hijau + APK di Releases.
+10. README final (Divio system), qa-manual §6 update (SAF flow sudah real).
+
+---
+
+## FILE MAP (yang penting)
+
+| File | Role |
+|---|---|
+| `app/src/main/java/com/zaaam/editors/EditorsApp.kt` | Application; preload TextMate IO |
+| `.../di/AppContainer.kt` | DI: prefs, fileSystem, treeAccess, editorContents (ConcurrentHashMap), editorSession, screenState |
+| `.../session/AppScreen.kt` | enum FILES/EDITOR/PREVIEW |
+| `.../ui/files/FilesViewModel.kt` | SAF state machine; pathStack main-only; loadJob+generation; recents pipe-safe |
+| `.../ui/files/FilesScreen.kt` | picker launcher, breadcrumb, skeleton, banner, remember(keys) filter, fileDateFormat top-level |
+| `.../ui/components/SafDialog.kt` | dialog SAF blocking spec §9.5 |
+| `.../ui/editor/EditorScreen.kt` | AndroidView CodeEditor; debounce+flush; languageCache; appliedScope retry |
+| `.../ui/editor/EditorViewModel.kt` | tabs/contentMap(=editorContents)/saveStatus; onContentChange(uri eksplisit) |
+| `core-editor/.../EditorEngine.kt` | extends CodeEditor; initTextMate idempotent; createColorScheme |
+| `core-editor/.../SoraThemeMapper.kt` | chrome overrides (schemes.EditorColorScheme) |
+| `core-editor/.../LanguageResolver.kt` | ext→scope textmate |
+| `core-fs/.../SafFileSystemImpl.kt` | SAF ops real; use{}; 2MB guard |
+| `core-fs/.../FileKindResolver.kt` | TreeAccess real; HiddenFiles; Kind; stencilLabel |
+| `app/src/main/assets/textmate/` | retro-lcd.json theme, languages.json, 6 grammar custom |
+| `gradle/libs.versions.toml` | soraEditor=0.23.6 Central; desugar=2.1.5 |
+| `.github/workflows/ci.yml` | push/PR main: assemble+test+lint+artifact |
+| `.github/workflows/release.yml` | tags v* + workflow_dispatch; secrets via env |
+
+## RIWAYAT COMMIT SESI INI (baru)
+`df17cb5` SAF files real → `86d682c` Sora+assets+desugaring → `93ec18f` schemes import → `56077c0` api deps (CI GREEN pertama full feature) → `0fcb385` docs → `80841fd` reviewer loop 1 (user zip fix) → `37b9678` reaudit fix (user zip fix 2) — semuanya CI GREEN.
+
+## VERIFIKASI CEPAT
+```
+git push origin main && gh run list --limit 1          # CI
+gh run view <id> --log-failed | grep -E "e: file"      # error compile
+gh release list                                        # APK releases
+```
