@@ -50,7 +50,7 @@ jobs:
       - name: Prepare Release Assets
         run: |
           APK_PATH=$(find app/build/outputs/apk/release -name "*.apk" | head -1)
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="$(printf '%s' "${GITHUB_REF_NAME#v}" | LC_ALL=C tr -cd 'A-Za-z0-9._-')"
           cp "$APK_PATH" "zaaam-editors-${VERSION}.apk"
           echo "APK_PATH=$APK_PATH" >> $GITHUB_ENV
           echo "RELEASE_NAME=zaaam-editors-${VERSION}.apk" >> $GITHUB_ENV
