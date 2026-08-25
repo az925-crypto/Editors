@@ -1,0 +1,70 @@
+<resources>
+    <string name="app_name">zaaam/editors</string>
+
+    <string name="empty_editor">Tidak ada file terbuka</string>
+    <string name="empty_editor_desc">Buka file dari tab Files untuk mulai mengedit. Layar LCD olive menunggu.</string>
+    <string name="open_files">Buka Files</string>
+
+    <string name="empty_files">Belum ada file</string>
+    <string name="empty_files_desc">Buka folder dari breadcrumb atau izin storage dulu</string>
+    <string name="pick_folder">Pilih folder</string>
+
+    <string name="search_hint">Cari file di folder ini…</string>
+
+    <string name="recent_section">Terkini — cartridge tray</string>
+    <string name="hidden_on">HIDDEN: ON</string>
+    <string name="hidden_off">HIDDEN: OFF</string>
+    <string name="hidden_a11y">Tampilkan hidden files</string>
+
+    <string name="perm_denied_title">Akses storage ditolak</string>
+    <string name="perm_denied_msg">zaaam/editors butuh izin SAF untuk membaca file. Tanpa itu, file tree kosong.</string>
+    <string name="retry_pick">Pilih folder</string>
+    <string name="dismiss_banner">Tutup</string>
+
+    <string name="saf_dialog_title">Izinkan akses file</string>
+    <string name="saf_dialog_body">zaaam/editors butuh akses penyimpanan untuk membuka file kode kamu. Pilih folder root atau folder project saja.</string>
+    <string name="saf_perm_1">Browse semua folder via Storage Access Framework</string>
+    <string name="saf_perm_2">Akses hidden files (.gitignore, .thumbnails, dll)</string>
+    <string name="saf_perm_3">Tanpa izin lokasi & tanpa tracking</string>
+    <string name="saf_btn_later">Nanti</string>
+    <string name="saf_btn_pick">Pilih folder</string>
+    <string name="saf_error">Akses ditolak. Coba lagi atau lanjut tanpa akses.</string>
+    <string name="saf_loading">Memilih folder…</string>
+    <string name="access_granted">Akses diberikan</string>
+    <string name="access_denied_no_perm">Masuk tanpa akses — beberapa fitur terbatas</string>
+
+    <string name="editor_undo">Urungkan</string>
+    <string name="editor_redo">Ulangi</string>
+    <string name="editor_find">Find</string>
+    <string name="editor_preview">Preview</string>
+    <string name="saving">Menyimpan…</string>
+    <string name="saved">Tersimpan %s</string>
+    <string name="binary_error_title">File tidak bisa dibuka sebagai teks</string>
+    <string name="binary_error_desc">%s adalah format biner. Edit teks tidak tersedia.</string>
+    <string name="open_hex_disabled">Buka sebagai hex — Phase 2</string>
+
+    <string name="preview_empty">Tidak ada preview</string>
+    <string name="preview_empty_desc">Buka file HTML/CSS/JS di Editor, lalu tap Preview</string>
+    <string name="go_to_editor">Ke Editor</string>
+    <string name="url_refresh">Muat ulang preview</string>
+    <string name="updating">Memperbarui…</string>
+    <string name="console_label">CONSOLE</string>
+    <string name="console_clear">Clear</string>
+    <string name="console_count">%d pesan · <b>%d err</b></string>
+
+    <string name="nav_files">Files</string>
+    <string name="nav_editor">Editor</string>
+    <string name="nav_preview">Preview</string>
+    <string name="nav_disabled_editor">Buka file dulu untuk mengedit</string>
+    <string name="nav_disabled_preview">Hanya file web (HTML/CSS/JS) bisa di-preview</string>
+
+    <string name="ctx_open">Buka</string>
+    <string name="ctx_rename">Rename</string>
+    <string name="ctx_delete">Hapus</string>
+    <string name="snack_deleted">%s dihapus</string>
+    <string name="snack_undo">Urungkan</string>
+    <string name="toast_find_stub">Find in file — Phase 2</string>
+    <string name="toast_open_settings">Stub: membuka pengaturan sistem</string>
+
+    <string name="boot_skip">Lewati</string>
+</resources>
