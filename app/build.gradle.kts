@@ -20,18 +20,16 @@ android {
         jvmToolchain(17)
     }
 
-    composeOptions {
-        kotlinCompilerExtensionVersion = "2.4.10"
-    }
-
     signingConfigs {
-        create("config") {
+        create("release") {
             val storeFilePath = System.getenv("RELEASE_STORE_FILE") ?: ""
-            if (storeFilePath.isNotBlank()) {
+            if (storeFilePath.isNotBlank() && file(storeFilePath).exists()) {
                 storeFile = file(storeFilePath)
                 storePassword = System.getenv("RELEASE_STORE_PASS") ?: ""
                 keyAlias = System.getenv("RELEASE_KEY_ALIAS") ?: ""
                 keyPassword = System.getenv("RELEASE_KEY_PASS") ?: ""
+                enableV1Signing = true
+                enableV2Signing = true
             }
         }
     }
@@ -39,7 +37,6 @@ android {
     buildTypes {
         debug {
             isDebuggable = true
-            signingConfig = signingConfigs.getByName("config")
         }
         release {
             isMinifyEnabled = true
@@ -48,7 +45,10 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = signingConfigs.getByName("config")
+            val releaseConfig = signingConfigs.findByName("release")
+            if (releaseConfig != null && releaseConfig.storeFile != null && releaseConfig.storeFile!!.exists()) {
+                signingConfig = releaseConfig
+            }
         }
     }
 

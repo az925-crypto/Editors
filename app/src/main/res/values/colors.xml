@@ -1,0 +1,11 @@
+<resources>
+    <color name="bone_shell">#E8E3D5</color>
+    <color name="bone_card">#F2EDE1</color>
+    <color name="bone_border">#D9D2BE</color>
+    <color name="graphite">#26241F</color>
+    <color name="ink">#1A2010</color>
+    <color name="olive">#B8C24D</color>
+    <color name="olive_dim">#8FA06A</color>
+    <color name="olive_text">#DDE8A0</color>
+    <color name="brick">#E53935</color>
+</resources>
