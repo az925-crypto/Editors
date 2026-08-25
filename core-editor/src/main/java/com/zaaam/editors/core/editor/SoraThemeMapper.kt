@@ -1,7 +1,12 @@
 package com.zaaam.editors.core.editor
 
-class SoraThemeMapper(private val tokens: Any) {
-    fun map(tokens: Any): Map<String, Any> = emptyMap()
-    fun mapLanguage(scope: String): String = scope
-    fun textMateScheme(): Map<String, Any> = emptyMap()
+import io.github.rosemoe.sora.widget.EditorColorScheme
+
+class SoraThemeMapper {
+    fun applyChromeOverrides(scheme: EditorColorScheme) {
+        scheme.setColor(EditorColorScheme.SCROLL_BAR, 0xFF5A6340.toInt())
+        scheme.setColor(EditorColorScheme.SCROLL_BAR_THUMB, 0xFF8FA06A.toInt())
+        scheme.setColor(EditorColorScheme.PANEL_BACKGROUND, 0xFF1A2010.toInt())
+        scheme.setColor(EditorColorScheme.WHITESPACE, 0xFF5A6340.toInt())
+    }
 }

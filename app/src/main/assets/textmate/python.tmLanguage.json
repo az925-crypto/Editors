@@ -1,0 +1,40 @@
+{
+  "name": "Python",
+  "scopeName": "source.python",
+  "fileTypes": ["py"],
+  "patterns": [
+    { "include": "#comment" },
+    { "include": "#string" },
+    { "include": "#keyword" },
+    { "include": "#function" },
+    { "include": "#number" },
+    { "include": "#decorator" }
+  ],
+  "repository": {
+    "comment": {
+      "match": "#.*$",
+      "name": "comment.line.number-sign.python"
+    },
+    "string": {
+      "begin": "\"\"\"",
+      "end": "\"\"\"",
+      "name": "string.quoted.triple.python"
+    },
+    "keyword": {
+      "match": "\\b(def|class|if|elif|else|for|while|return|import|from|as|try|except|finally|with|yield|lambda|pass|break|continue|True|False|None|self|and|or|not|in|is)\\b",
+      "name": "keyword.control.python"
+    },
+    "function": {
+      "match": "\\b(def)\\s+([a-zA-Z_][a-zA-Z0-9_]*)",
+      "captures": { "2": { "name": "entity.name.function.python" } }
+    },
+    "number": {
+      "match": "\\b\\d+(\\.\\d+)?\\b",
+      "name": "constant.numeric.python"
+    },
+    "decorator": {
+      "match": "@[a-zA-Z_][a-zA-Z0-9_.]*",
+      "name": "storage.type.decorator.python"
+    }
+  }
+}

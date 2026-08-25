@@ -1,0 +1,39 @@
+{
+  "name": "JSON",
+  "scopeName": "source.json",
+  "fileTypes": ["json"],
+  "patterns": [
+    { "include": "#string-key" },
+    { "include": "#string-value" },
+    { "include": "#number" },
+    { "include": "#boolean" },
+    { "include": "#null" }
+  ],
+  "repository": {
+    "string-key": {
+      "begin": "\"",
+      "end": "\"",
+      "name": "support.type.property-name.json",
+      "patterns": [
+        { "match": ".", "name": "support.type.property-name.json" }
+      ]
+    },
+    "string-value": {
+      "begin": "\"",
+      "end": "\"",
+      "name": "string.quoted.double.json"
+    },
+    "number": {
+      "match": "-?\\b\\d+(\\.\\d+)?([eE][+-]?\\d+)?\\b",
+      "name": "constant.numeric.json"
+    },
+    "boolean": {
+      "match": "\\b(true|false)\\b",
+      "name": "constant.language.json"
+    },
+    "null": {
+      "match": "\\bnull\\b",
+      "name": "constant.language.json"
+    }
+  }
+}

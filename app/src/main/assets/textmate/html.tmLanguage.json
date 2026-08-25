@@ -1,0 +1,26 @@
+{
+  "name": "HTML",
+  "scopeName": "text.html.basic",
+  "fileTypes": ["html", "htm"],
+  "patterns": [
+    { "include": "#tag" },
+    { "include": "#comment" },
+    { "include": "#string" }
+  ],
+  "repository": {
+    "tag": {
+      "match": "</?[a-zA-Z][a-zA-Z0-9]*",
+      "name": "entity.name.tag.html"
+    },
+    "comment": {
+      "begin": "<!--",
+      "end": "-->",
+      "name": "comment.block.html"
+    },
+    "string": {
+      "begin": "\"",
+      "end": "\"",
+      "name": "string.quoted.double.html"
+    }
+  }
+}

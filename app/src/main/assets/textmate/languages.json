@@ -1,0 +1,34 @@
+{
+  "languages": [
+    {
+      "name": "html",
+      "scopeName": "text.html.basic",
+      "path": "./html.tmLanguage.json"
+    },
+    {
+      "name": "css",
+      "scopeName": "source.css",
+      "path": "./css.tmLanguage.json"
+    },
+    {
+      "name": "javascript",
+      "scopeName": "source.js",
+      "path": "./javascript.tmLanguage.json"
+    },
+    {
+      "name": "kotlin",
+      "scopeName": "source.kotlin",
+      "path": "./kotlin.tmLanguage.json"
+    },
+    {
+      "name": "python",
+      "scopeName": "source.python",
+      "path": "./python.tmLanguage.json"
+    },
+    {
+      "name": "json",
+      "scopeName": "source.json",
+      "path": "./json.tmLanguage.json"
+    }
+  ]
+}

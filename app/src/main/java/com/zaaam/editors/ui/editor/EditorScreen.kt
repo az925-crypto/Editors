@@ -1,5 +1,6 @@
 package com.zaaam.editors.ui.editor
 
+import android.view.ViewGroup
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -7,35 +8,37 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.zaaam.editors.core.editor.EditorEngine
+import com.zaaam.editors.core.editor.LanguageResolver
+import com.zaaam.editors.core.editor.SoraThemeMapper
 import com.zaaam.editors.di.AppContainer
 import com.zaaam.editors.ui.theme.RetroTokens
+import io.github.rosemoe.sora.event.ContentChangeEvent
+import io.github.rosemoe.sora.langs.textmate.TextMateLanguage
+import io.github.rosemoe.sora.langs.textmate.TextMateColorScheme
 
 @Composable
 fun EditorScreen(container: AppContainer) {
@@ -78,24 +81,52 @@ fun EditorScreen(container: AppContainer) {
                 Text(text = "Preview ▶", modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(RetroTokens.Olive).padding(horizontal = 12.dp, vertical = 6.dp), fontSize = 12.sp, color = RetroTokens.Ink, fontWeight = FontWeight.Bold)
             }
         }
-        Box(modifier = Modifier.weight(1f).fillMaxWidth().background(RetroTokens.Ink).padding(12.dp)) {
-            Row(modifier = Modifier.fillMaxSize()) {
-                val lines = state.content.split("\n").size
-                Column(modifier = Modifier.width(36.dp), horizontalAlignment = Alignment.End) {
-                    for (i in 1..lines) {
-                        Text(text = "$i", fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = RetroTokens.OliveDim, lineHeight = 20.sp)
+        val activeUri = state.activeUri
+        val content = state.content
+        val languageResolver = remember { LanguageResolver() }
+        val themeMapper = remember { SoraThemeMapper() }
+        val appliedScope = remember { mutableStateOf<String?>(null) }
+
+        AndroidView(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .background(RetroTokens.LcdBg),
+            factory = { ctx ->
+                val editor = EditorEngine.create(ctx)
+                editor.layoutParams = ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+                try {
+                    EditorEngine.initTextMate(ctx)
+                    val scheme: TextMateColorScheme = EditorEngine.createColorScheme()
+                    themeMapper.applyChromeOverrides(scheme)
+                    editor.setColorScheme(scheme)
+                } catch (_: Exception) {
+                }
+                editor.subscribeEvent(ContentChangeEvent::class.java) { event, _ ->
+                    if (event.action != ContentChangeEvent.ACTION_SET_NEW_TEXT) {
+                        vm.onContentChange(editor.text.toString())
                     }
                 }
-                Spacer(modifier = Modifier.width(8.dp))
-                BasicTextField(
-                    value = state.content,
-                    onValueChange = { vm.onContentChange(it) },
-                    modifier = Modifier.fillMaxSize(),
-                    textStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp, lineHeight = 20.sp, color = RetroTokens.OliveText),
-                    cursorBrush = SolidColor(RetroTokens.Olive)
-                )
+                editor
+            },
+            update = { editor ->
+                if (editor.text?.toString() != content) {
+                    editor.setText(content)
+                }
+                if (activeUri != null && appliedScope.value != activeUri) {
+                    appliedScope.value = activeUri
+                    try {
+                        val scope = languageResolver.resolve(activeUri)
+                        editor.setEditorLanguage(TextMateLanguage.create(scope, true))
+                    } catch (_: Exception) {
+                    }
+                }
             }
-        }
+        )
+
         if (state.saveStatus != SaveStatus.Idle) {
             Row(modifier = Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Box(modifier = Modifier.size(6.dp).clip(RoundedCornerShape(3.dp)).background(when (state.saveStatus) { is SaveStatus.Saving -> RetroTokens.LedOrange; is SaveStatus.Saved -> RetroTokens.LedGreen; else -> Color.Transparent }))

@@ -1,0 +1,21 @@
+{
+  "name": "Retro LCD",
+  "type": "dark",
+  "colors": {
+    "editor.background": "#1A2010",
+    "editor.foreground": "#DDE8A0",
+    "editor.lineHighlightBackground": "#232B14",
+    "editorLineNumber.foreground": "#5A6340",
+    "editorCursor.foreground": "#B8C24D",
+    "editor.selectionBackground": "#3EB8C24D"
+  },
+  "tokenColors": [
+    { "scope": ["comment"], "settings": { "foreground": "#8FA06A", "fontStyle": "italic" } },
+    { "scope": ["string", "string.quoted"], "settings": { "foreground": "#C7D46B" } },
+    { "scope": ["keyword", "storage", "keyword.control", "storage.type"], "settings": { "foreground": "#FF8A5B" } },
+    { "scope": ["constant.numeric", "constant.language"], "settings": { "foreground": "#FFB86C" } },
+    { "scope": ["entity.name.tag"], "settings": { "foreground": "#DDE8A0" } },
+    { "scope": ["entity.other.attribute-name", "support.type.property-name"], "settings": { "foreground": "#B8C24D" } },
+    { "scope": ["entity.name.function", "support.function"], "settings": { "foreground": "#B8C24D" } }
+  ]
+}

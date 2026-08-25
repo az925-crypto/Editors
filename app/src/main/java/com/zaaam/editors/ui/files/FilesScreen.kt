@@ -1,6 +1,5 @@
 package com.zaaam.editors.ui.files
 
-import android.app.Activity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -26,19 +25,16 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.activity.ComponentActivity
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.zaaam.editors.core.fs.FsEntry
 import com.zaaam.editors.core.fs.Kind
@@ -50,24 +46,11 @@ import com.zaaam.editors.ui.theme.RetroTokens
 fun FilesScreen(container: AppContainer) {
     val vm: FilesViewModel = viewModel { FilesViewModel(container) }
     val state by vm.uiState.collectAsState()
-    val context = LocalContext.current
 
     val picker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
     ) { uri ->
         if (uri != null) vm.onTreeUriSelected(uri) else vm.onPickerCancelled()
-    }
-
-    DisposableEffect(Unit) {
-        val callback = androidx.activity.OnBackPressedCallback(true) {
-            if (!vm.navigateUp()) {
-                isEnabled = false
-                context.let { (it as? Activity)?.onBackPressedDispatcher?.onBackPressed() }
-            }
-        }
-        val activity = context as? ComponentActivity
-        activity?.onBackPressedDispatcher?.addCallback(callback)
-        onDispose { callback.remove() }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
