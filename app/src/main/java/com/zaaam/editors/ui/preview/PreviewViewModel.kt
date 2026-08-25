@@ -103,7 +103,7 @@ class PreviewViewModel(private val container: AppContainer) : ViewModel() {
         when (ext) {
             "css" -> {
                 docHtml = PreviewComposer.wrapStandaloneDocument(PreviewComposer.StandaloneKind.CSS)
-                cssFragment = listOf(content, otherCss).filter { it.isNotBlank() }.joinToString("\n").ifBlank { null }
+                cssFragment = listOfNotNull(content, otherCss).filter { it.isNotBlank() }.joinToString("\n").ifBlank { null }
                 jsFragment = otherJs
             }
             "js" -> {
