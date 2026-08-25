@@ -16,14 +16,8 @@ android {
         vectorDrawables.useSupportLibrary = true
     }
 
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
-    }
-
-    kotlinOptions {
-        jvmTarget = "17"
-        freeCompilerArgs += listOf("-Xuse-ir", "-Xskip-metadata-version-check")
+    kotlin {
+        jvmToolchain(17)
     }
 
     composeOptions {
@@ -52,11 +46,6 @@ android {
             storePassword = System.getenv("RELEASE_STORE_PASS") ?: ""
             keyAlias = System.getenv("RELEASE_KEY_ALIAS") ?: ""
             keyPassword = System.getenv("RELEASE_KEY_PASS") ?: ""
-            if (storeFile?.exists() == true) {
-                v1SigningEnabled = true
-                v2SigningEnabled = true
-                v3SigningEnabled = true
-            }
         }
     }
 
