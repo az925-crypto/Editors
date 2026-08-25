@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 class AppContainer(application: Application) {
     val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
     val mainDispatcher: CoroutineDispatcher = Dispatchers.Main
+    val prefs = application.getSharedPreferences("zaaam_editors", android.content.Context.MODE_PRIVATE)
 
     val fileSystem = SafFileSystemImpl(application.contentResolver)
     val treeAccess = TreeAccess(application.contentResolver)

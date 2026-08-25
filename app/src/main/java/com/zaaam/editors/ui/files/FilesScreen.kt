@@ -1,5 +1,8 @@
 package com.zaaam.editors.ui.files
 
+import android.app.Activity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -14,118 +17,291 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.activity.ComponentActivity
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.zaaam.editors.core.editor.TabState
+import com.zaaam.editors.core.fs.FsEntry
 import com.zaaam.editors.core.fs.Kind
 import com.zaaam.editors.di.AppContainer
-import com.zaaam.editors.session.AppScreen
+import com.zaaam.editors.ui.components.SafDialog
 import com.zaaam.editors.ui.theme.RetroTokens
 
 @Composable
 fun FilesScreen(container: AppContainer) {
     val vm: FilesViewModel = viewModel { FilesViewModel(container) }
     val state by vm.uiState.collectAsState()
+    val context = LocalContext.current
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(RetroTokens.Shell)
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Text(
-            text = "Portfoliomu, siap di-edit.",
-            fontWeight = FontWeight.ExtraBold,
-            fontSize = 22.sp,
-            color = RetroTokens.Graphite
-        )
-        Text(
-            text = "/storage/emulated/0 — ${state.entries.size} items · cartridge tray",
-            fontFamily = FontFamily.Monospace,
-            fontSize = 11.sp,
-            color = RetroTokens.Dim
-        )
-        Box(
+    val picker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) vm.onTreeUriSelected(uri) else vm.onPickerCancelled()
+    }
+
+    DisposableEffect(Unit) {
+        val callback = androidx.activity.OnBackPressedCallback(true) {
+            if (!vm.navigateUp()) {
+                isEnabled = false
+                context.let { (it as? Activity)?.onBackPressedDispatcher?.onBackPressed() }
+            }
+        }
+        val activity = context as? ComponentActivity
+        activity?.onBackPressedDispatcher?.addCallback(callback)
+        onDispose { callback.remove() }
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(RetroTokens.Shell)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "Portfoliomu, siap di-edit.",
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 22.sp,
+                color = RetroTokens.Graphite
+            )
+            Text(
+                text = if (state.treeUri != null) "${state.pathSegments.lastOrNull() ?: "storage"} — ${state.entries.size} items" else "Belum ada folder",
+                fontFamily = FontFamily.Monospace,
+                fontSize = 11.sp,
+                color = RetroTokens.Dim
+            )
+            Breadcrumb(
+                segments = state.pathSegments,
+                onSegmentClick = { vm.navigateToSegment(it) },
+                onPickFolder = { picker.launch(null) }
+            )
+            OutlinedTextField(
+                value = state.query,
+                onValueChange = { vm.onQueryChange(it) },
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text("Cari file di folder ini…") },
+                singleLine = true,
+                enabled = state.treeUri != null
+            )
+            if (state.recents.isNotEmpty()) {
+                Text(
+                    text = "Terkini — CARTRIDGE TRAY",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = RetroTokens.Dim,
+                    letterSpacing = 0.9.sp
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    state.recents.take(3).forEach { recent ->
+                        Card(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { vm.openRecent(recent) },
+                            colors = CardDefaults.cardColors(containerColor = RetroTokens.Card),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Text(
+                                text = recent.name,
+                                modifier = Modifier.padding(8.dp),
+                                fontSize = 12.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
+            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = "MEMORY CARDS",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = RetroTokens.Dim,
+                    letterSpacing = 0.9.sp
+                )
+                FilterChip(
+                    selected = state.showHidden,
+                    onClick = { vm.toggleHidden() },
+                    label = {
+                        Text(
+                            if (state.showHidden) "HIDDEN: ON" else "HIDDEN: OFF",
+                            fontSize = 11.sp
+                        )
+                    }
+                )
+            }
+            if (state.permDenied && !state.showSafDialog) {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = RetroTokens.BrickWash),
+                    shape = RoundedCornerShape(12.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, RetroTokens.Brick.copy(alpha = 0.18f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Akses ditolak",
+                                fontWeight = FontWeight.Bold,
+                                color = RetroTokens.Brick,
+                                fontSize = 13.sp
+                            )
+                            Text(
+                                text = "Pilih folder lagi untuk buka file.",
+                                fontSize = 12.sp,
+                                color = RetroTokens.Dim
+                            )
+                        }
+                        Text(
+                            text = "Pilih folder",
+                            modifier = Modifier.clickable { picker.launch(null) },
+                            color = RetroTokens.Olive,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
+                        )
+                    }
+                }
+            }
+            when {
+                state.isLoading -> SkeletonLoader()
+                state.treeUri == null && !state.hasDismissedSaf -> EmptyState(
+                    text = "Belum ada folder",
+                    subtext = "Pilih folder untuk mulai browse file",
+                    actionText = "Pilih folder",
+                    onAction = { picker.launch(null) }
+                )
+                state.entries.isEmpty() && state.query.isBlank() -> EmptyState(
+                    text = "Folder kosong",
+                    subtext = "Belum ada file di folder ini"
+                )
+                else -> {
+                    val filtered = vm.filteredEntries()
+                    if (filtered.isEmpty() && state.query.isNotBlank()) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(text = "Tidak ada yang cocok", color = RetroTokens.Dim, fontSize = 14.sp)
+                            Text(
+                                text = "Coba kata kunci lain atau aktifkan HIDDEN",
+                                color = RetroTokens.Dim,
+                                fontSize = 12.sp
+                            )
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            items(filtered, key = { it.uri.toString() }) { entry ->
+                                FileRow(entry = entry, onClick = { vm.openFile(entry) })
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (state.showSafDialog) {
+            SafDialog(
+                isPicking = state.isPicking,
+                error = state.safError,
+                onPick = { picker.launch(null) },
+                onDismiss = { vm.dismissSaf() }
+            )
+        }
+    }
+}
+
+@Composable
+private fun Breadcrumb(
+    segments: List<String>,
+    onSegmentClick: (Int) -> Unit,
+    onPickFolder: () -> Unit
+) {
+    if (segments.isEmpty()) {
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(12.dp))
                 .background(RetroTokens.Card)
-                .padding(12.dp)
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(text = "/storage/emulated/0", fontFamily = FontFamily.Monospace, fontSize = 13.sp, color = RetroTokens.Graphite)
-        }
-        OutlinedTextField(
-            value = state.query,
-            onValueChange = { vm.onQueryChange(it) },
-            modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("Cari file di folder ini…") },
-            singleLine = true
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            state.recents.take(3).forEach { name ->
-                Card(
-                    modifier = Modifier.weight(1f).clickable {
-                        val fileName = name.substringAfterLast("/")
-                        val uri = "content://dummy/$fileName"
-                        container.editorSession.addTab(TabState(uri, fileName))
-                        container.screenState.value = AppScreen.EDITOR
-                    },
-                    colors = CardDefaults.cardColors(containerColor = RetroTokens.Card)
-                ) {
-                    Text(text = name.substringAfterLast("/"), modifier = Modifier.padding(8.dp), fontSize = 12.sp)
-                }
-            }
-        }
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-            Text(text = "Terkini — cartridge tray", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = RetroTokens.Dim)
-            FilterChip(
-                selected = state.showHidden,
-                onClick = { vm.toggleHidden() },
-                label = { Text(if (state.showHidden) "HIDDEN: ON" else "HIDDEN: OFF", fontSize = 11.sp) }
+            Text(
+                text = "Belum ada folder · Tap Pilih folder",
+                fontFamily = FontFamily.Monospace,
+                fontSize = 11.sp,
+                color = RetroTokens.Dim
+            )
+            Text(
+                text = "Pilih folder",
+                modifier = Modifier.clickable { onPickFolder() },
+                color = RetroTokens.Olive,
+                fontWeight = FontWeight.Bold,
+                fontSize = 12.sp
             )
         }
-        if (state.permDenied) {
-            Card(colors = CardDefaults.cardColors(containerColor = RetroTokens.Brick.copy(alpha = 0.12f)), modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Text(text = "Akses ditolak", fontWeight = FontWeight.Bold, color = RetroTokens.Brick)
-                    Text(text = "File tetap tampil sebagai demo. Tap Pilih folder untuk akses penuh.", fontSize = 12.sp, color = RetroTokens.Dim)
-                }
-            }
-        }
-        LazyColumn(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            val filtered = vm.filteredEntries()
-            if (filtered.isEmpty()) {
-                item { Text(text = "Tidak ada yang cocok", modifier = Modifier.padding(16.dp), color = RetroTokens.Dim) }
-            } else {
-                items(filtered, key = { it.name }) { entry ->
-                    FileRow(entry = entry, onClick = {
-                        if (entry.isDir) {
-                            vm.toggleDir(entry.name)
-                        } else {
-                            val uri = entry.uri.toString()
-                            val isBinary = entry.kind == Kind.BINARY
-                            container.editorSession.addTab(TabState(uri, entry.name, binary = isBinary))
-                            container.screenState.value = AppScreen.EDITOR
+    } else {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(RetroTokens.Card)
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f)
+            ) {
+                items(segments.size) { index ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (index > 0) {
+                            Text(
+                                text = "›",
+                                color = RetroTokens.Dim,
+                                fontSize = 11.sp,
+                                modifier = Modifier.padding(horizontal = 2.dp)
+                            )
                         }
-                    })
+                        Text(
+                            text = segments[index],
+                            fontFamily = if (index == 0) FontFamily.Monospace else FontFamily.Default,
+                            fontSize = if (index == 0) 11.sp else 13.sp,
+                            fontWeight = if (index == segments.lastIndex) FontWeight.Bold else FontWeight.SemiBold,
+                            color = if (index == 0) RetroTokens.Dim else RetroTokens.Graphite,
+                            modifier = Modifier.clickable { onSegmentClick(index) }
+                        )
+                    }
                 }
             }
         }
@@ -133,12 +309,61 @@ fun FilesScreen(container: AppContainer) {
 }
 
 @Composable
-private fun FileRow(entry: com.zaaam.editors.core.fs.FsEntry, onClick: () -> Unit) {
+private fun SkeletonLoader() {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        repeat(8) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(68.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(RetroTokens.Border.copy(alpha = 0.6f))
+            )
+        }
+    }
+}
+
+@Composable
+private fun EmptyState(
+    text: String,
+    subtext: String,
+    actionText: String? = null,
+    onAction: (() -> Unit)? = null
+) {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(text = text, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = RetroTokens.Graphite)
+            Text(text = subtext, fontSize = 13.sp, color = RetroTokens.Dim)
+            if (actionText != null && onAction != null) {
+                Spacer(modifier = Modifier.height(8.dp))
+                androidx.compose.material3.Button(
+                    onClick = onAction,
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = RetroTokens.Olive,
+                        contentColor = RetroTokens.Ink
+                    ),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Text(text = actionText, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FileRow(entry: FsEntry, onClick: () -> Unit) {
     val isWeb = entry.kind == Kind.WEB
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(16.dp))
             .background(if (entry.isHidden) RetroTokens.Card.copy(alpha = 0.6f) else RetroTokens.Card)
             .clickable { onClick() }
             .padding(12.dp),
@@ -165,13 +390,39 @@ private fun FileRow(entry: com.zaaam.editors.core.fs.FsEntry, onClick: () -> Uni
                 fontFamily = FontFamily.Monospace
             )
             if (isWeb) {
-                Box(modifier = Modifier.size(6.dp).clip(RoundedCornerShape(3.dp)).background(RetroTokens.Olive).align(Alignment.TopEnd))
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(RetroTokens.Olive)
+                        .align(Alignment.TopEnd)
+                )
             }
         }
         Column(modifier = Modifier.weight(1f)) {
-            Text(text = entry.name, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = RetroTokens.Graphite)
-            Text(text = "${entry.size / 1000} KB · 25 Agu" + if (entry.isHidden) " ·hidden" else "", fontSize = 11.sp, color = RetroTokens.Dim, fontFamily = FontFamily.Monospace)
+            Text(
+                text = entry.name,
+                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp,
+                color = RetroTokens.Graphite
+            )
+            Text(
+                text = buildString {
+                    append("${entry.size / 1000} KB")
+                    if (entry.lastModified > 0) {
+                        val sdf = java.text.SimpleDateFormat("d MMM", java.util.Locale("id"))
+                        append(" · ${sdf.format(java.util.Date(entry.lastModified))}")
+                    }
+                    if (entry.isHidden) append(" ·hidden")
+                },
+                fontSize = 11.sp,
+                color = RetroTokens.Dim,
+                fontFamily = FontFamily.Monospace
+            )
         }
-        Text(text = if (entry.isDir) "›" else "", color = RetroTokens.Dim)
+        Text(
+            text = if (entry.isDir) "›" else "",
+            color = RetroTokens.Dim
+        )
     }
 }

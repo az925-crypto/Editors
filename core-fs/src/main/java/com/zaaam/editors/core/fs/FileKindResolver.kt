@@ -31,9 +31,39 @@ interface SafFileSystem {
 }
 
 class TreeAccess(private val contentResolver: android.content.ContentResolver) {
-    suspend fun takePersistablePermission(uri: Uri) = FsResult.Success(Unit)
-    suspend fun releasePermission(uri: Uri) = FsResult.Success(Unit)
-    fun isPermissionValid(uri: Uri) = true
+    suspend fun takePersistablePermission(uri: Uri): FsResult<Unit> {
+        return try {
+            contentResolver.takePersistableUriPermission(
+                uri,
+                android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            )
+            FsResult.Success(Unit)
+        } catch (e: SecurityException) {
+            FsResult.Error(e)
+        }
+    }
+
+    suspend fun releasePermission(uri: Uri): FsResult<Unit> {
+        return try {
+            contentResolver.releasePersistableUriPermission(
+                uri,
+                android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            )
+            FsResult.Success(Unit)
+        } catch (e: SecurityException) {
+            FsResult.Error(e)
+        }
+    }
+
+    fun isPermissionValid(uri: Uri): Boolean {
+        return try {
+            contentResolver.persistedUriPermissions.any {
+                it.uri == uri && it.isReadPermission
+            }
+        } catch (e: Exception) {
+            false
+        }
+    }
 }
 
 class HiddenFiles {

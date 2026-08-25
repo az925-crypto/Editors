@@ -67,8 +67,8 @@ class SafFileSystemImpl(private val resolver: ContentResolver) : SafFileSystem {
 
     override suspend fun rename(uri: Uri, newName: String): FsResult<Uri> = withContext(Dispatchers.IO) {
         try {
-            DocumentsContract.renameDocument(resolver, uri, newName)
-            FsResult.Success(uri)
+            val newUri = DocumentsContract.renameDocument(resolver, uri, newName)
+            if (newUri != null) FsResult.Success(newUri) else FsResult.Success(uri)
         } catch (e: Exception) {
             FsResult.Error(e)
         }
