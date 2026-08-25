@@ -1,7 +1,6 @@
 package com.zaaam.editors.core.fs
 
 import android.net.Uri
-import kotlinx.coroutines.flow.Flow
 
 data class FsEntry(
     val name: String,
@@ -17,23 +16,23 @@ enum class Kind {
     WEB, CODE, CONFIG, BINARY
 }
 
-interface SafFileSystem {
-    suspend fun listChildren(parentUri: Uri): Result<List<FsEntry>>
-    suspend fun readText(uri: Uri): Result<String>
-    suspend fun writeText(uri: Uri, text: String): Result<Unit>
-    suspend fun mkdir(parentUri: Uri, name: String): Result<Uri>
-    suspend fun rename(uri: Uri, newName: String): Result<Uri>
-    suspend fun delete(uri: Uri): Result<Unit>
+sealed interface FsResult<out T> {
+    data class Success<T>(val value: T) : FsResult<T>
+    data class Error<T>(val exception: Exception) : FsResult<T>
 }
 
-sealed interface Result<out T> {
-    data class Success<T>(val value: T) : Result<T>
-    data class Error<T>(val exception: Exception) : Result<T>
+interface SafFileSystem {
+    suspend fun listChildren(parentUri: Uri): FsResult<List<FsEntry>>
+    suspend fun readText(uri: Uri): FsResult<String>
+    suspend fun writeText(uri: Uri, text: String): FsResult<Unit>
+    suspend fun mkdir(parentUri: Uri, name: String): FsResult<Uri>
+    suspend fun rename(uri: Uri, newName: String): FsResult<Uri>
+    suspend fun delete(uri: Uri): FsResult<Unit>
 }
 
 class TreeAccess(private val contentResolver: android.content.ContentResolver) {
-    suspend fun takePersistablePermission(uri: Uri) = Result.Success(Unit)
-    suspend fun releasePermission(uri: Uri) = Result.Success(Unit)
+    suspend fun takePersistablePermission(uri: Uri) = FsResult.Success(Unit)
+    suspend fun releasePermission(uri: Uri) = FsResult.Success(Unit)
     fun isPermissionValid(uri: Uri) = true
 }
 

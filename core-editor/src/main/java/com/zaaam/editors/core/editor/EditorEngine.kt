@@ -2,8 +2,6 @@ package com.zaaam.editors.core.editor
 
 import android.content.Context
 import android.graphics.Typeface
-import android.text.Editable
-import android.text.TextWatcher
 import android.util.AttributeSet
 import android.widget.EditText
 import androidx.annotation.Keep
@@ -18,8 +16,8 @@ class EditorEngine @JvmOverloads constructor(
     private val ioDispatcher: CoroutineDispatcher
 ) : EditText(context, attrs, defStyleAttr) {
     init {
-        isTextSelectable = false
-        monoTypeface?.also { setTypeface(it) }
+        setTextIsSelectable(false)
+        monoTypeface?.let { typeface = it }
     }
 
     companion object {
