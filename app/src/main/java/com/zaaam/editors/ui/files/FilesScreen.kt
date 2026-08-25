@@ -1,5 +1,6 @@
 package com.zaaam.editors.ui.files
 
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -77,6 +78,11 @@ fun FilesScreen(container: AppContainer) {
     ) { uri ->
         if (uri != null) vm.onTreeUriSelected(uri) else vm.onPickerCancelled()
     }
+
+    // BACKLOG #2: system Back sebelumnya langsung keluar app — sekarang naik satu folder
+    // selama belum di root (BackHandler composable, BUKAN OnBackPressedCallback manual yang
+    // pernah gagal compile di repo ini).
+    BackHandler(enabled = state.pathSegments.size > 1) { vm.navigateUp() }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -193,6 +199,44 @@ fun FilesScreen(container: AppContainer) {
                             color = RetroTokens.Olive,
                             fontWeight = FontWeight.Bold,
                             fontSize = 13.sp
+                        )
+                    }
+                }
+            }
+            state.listError?.let { err ->
+                // BACKLOG #5: listError ada di state sejak lama tapi tak pernah dirender —
+                // tampilkan sebagai banner gaya permDenied (isi pesan sudah generik dari VM).
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = RetroTokens.BrickWash),
+                    shape = RoundedCornerShape(12.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, RetroTokens.Brick.copy(alpha = 0.18f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Terjadi kesalahan",
+                                fontWeight = FontWeight.Bold,
+                                color = RetroTokens.Brick,
+                                fontSize = 13.sp
+                            )
+                            Text(
+                                text = err,
+                                fontSize = 12.sp,
+                                color = RetroTokens.Dim
+                            )
+                        }
+                        Text(
+                            text = "×",
+                            modifier = Modifier
+                                .clickable { vm.clearListError() }
+                                .padding(4.dp),
+                            color = RetroTokens.Dim,
+                            fontWeight = FontWeight.Bold
                         )
                     }
                 }

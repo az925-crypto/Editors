@@ -25,6 +25,11 @@ data class RecentFile(
     val kind: Kind
 )
 
+// SECURITY: pesan error untuk UI dibuat generik — exception.message bisa berisi path internal
+// provider atau detail sistem yang tidak boleh tampil ke user.
+private const val MSG_OPEN_FAILED = "Gagal membuka file"
+private const val MSG_LIST_FAILED = "Gagal memuat folder"
+
 data class FilesUiState(
     val treeUri: Uri? = null,
     val currentUri: Uri? = null,
@@ -196,7 +201,9 @@ class FilesViewModel(private val container: AppContainer) : ViewModel() {
                     upsertRecent(entry)
                 }
                 is FsResult.Error -> {
-                    _uiState.update { it.copy(listError = result.exception.message) }
+                    // SECURITY: jangan bocorkan exception.message (bisa berisi path/internal
+                    // provider) — cukup pesan generik.
+                    _uiState.update { it.copy(listError = MSG_OPEN_FAILED) }
                 }
             }
         }
@@ -204,8 +211,20 @@ class FilesViewModel(private val container: AppContainer) : ViewModel() {
 
     fun openRecent(recent: RecentFile) {
         viewModelScope.launch {
-            val uri = Uri.parse(recent.uri)
-            when (val result = container.fileSystem.readText(uri)) {
+            // BACKLOG #4: recents dibaca dari SharedPreferences yang bisa basi/diubah luar —
+            // validasi scheme sebelum URI dipakai, dan tab BINARY tidak pernah readText.
+            if (!recent.uri.startsWith("content://")) {
+                _uiState.update { it.copy(listError = MSG_OPEN_FAILED) }
+                return@launch
+            }
+            if (recent.kind == Kind.BINARY) {
+                container.editorSession.addTab(
+                    TabState(recent.uri, recent.name, binary = true)
+                )
+                container.screenState.value = com.zaaam.editors.session.AppScreen.EDITOR
+                return@launch
+            }
+            when (val result = container.fileSystem.readText(Uri.parse(recent.uri))) {
                 is FsResult.Success -> {
                     // CRITICAL 3: sama seperti openFile — isi map bersama dulu baru addTab.
                     container.editorContents[recent.uri] = result.value
@@ -215,10 +234,14 @@ class FilesViewModel(private val container: AppContainer) : ViewModel() {
                     container.screenState.value = com.zaaam.editors.session.AppScreen.EDITOR
                 }
                 is FsResult.Error -> {
-                    _uiState.update { it.copy(listError = result.exception.message) }
+                    _uiState.update { it.copy(listError = MSG_OPEN_FAILED) }
                 }
             }
         }
+    }
+
+    fun clearListError() {
+        _uiState.update { it.copy(listError = null) }
     }
 
     fun setPermDenied(v: Boolean) {
@@ -266,7 +289,7 @@ class FilesViewModel(private val container: AppContainer) : ViewModel() {
                         it.copy(
                             isLoading = false,
                             permDenied = true,
-                            listError = result.exception.message
+                            listError = MSG_LIST_FAILED
                         )
                     }
                 }
@@ -294,32 +317,22 @@ class FilesViewModel(private val container: AppContainer) : ViewModel() {
         _uiState.update { it.copy(recents = recents) }
     }
 
-    // MEDIUM: nama file bisa mengandung "|", jadi split("|") biasa bisa pecah jadi lebih dari
-    // 3 bagian dan bikin field ketuker. Ambil bagian PERTAMA sebagai uri dan bagian TERAKHIR
-    // sebagai kind (keduanya dijamin tidak mengandung "|"), sisanya di tengah adalah nama file
-    // apa adanya — termasuk kalau ada "|" di dalamnya.
-    private fun parseRecentEntry(entry: String): RecentFile? {
-        val firstSep = entry.indexOf('|')
-        val lastSep = entry.lastIndexOf('|')
-        if (firstSep < 0 || lastSep <= firstSep) return null
-        val uri = entry.substring(0, firstSep)
-        val name = entry.substring(firstSep + 1, lastSep)
-        val kindRaw = entry.substring(lastSep + 1)
-        val kind = try { Kind.valueOf(kindRaw) } catch (_: Exception) { Kind.CONFIG }
-        return RecentFile(uri, name, kind)
-    }
-
     private fun restoreTreeUri() {
         val uriStr = container.prefs.getString("saf_tree_uri", null)
-        if (uriStr != null) {
-            val uri = Uri.parse(uriStr)
-            if (container.treeAccess.isPermissionValid(uri)) {
+        if (uriStr == null) {
+            _uiState.update { it.copy(showSafDialog = true) }
+            return
+        }
+        val uri = Uri.parse(uriStr)
+        viewModelScope.launch {
+            // PERF FIX: persistedUriPermissions adalah IPC binder ke system server — jangan
+            // dieksekusi di main thread saat cold start.
+            val valid = withContext(Dispatchers.IO) { container.treeAccess.isPermissionValid(uri) }
+            if (valid) {
                 onTreeUriSelected(uri)
             } else {
                 _uiState.update { it.copy(showSafDialog = true) }
             }
-        } else {
-            _uiState.update { it.copy(showSafDialog = true) }
         }
     }
 
@@ -334,4 +347,22 @@ class FilesViewModel(private val container: AppContainer) : ViewModel() {
             "storage"
         }
     }
+}
+
+// MEDIUM: nama file bisa mengandung "|", jadi split("|") biasa bisa pecah jadi lebih dari
+// 3 bagian dan bikin field ketuker. Ambil bagian PERTAMA sebagai uri dan bagian TERAKHIR
+// sebagai kind (keduanya dijamin tidak mengandung "|"), sisanya di tengah adalah nama file
+// apa adanya — termasuk kalau ada "|" di dalamnya.
+//
+// INTERNAL (bukan private): sengaja diekspos untuk unit test — parser ini punya edge case
+// yang gampang rusak kalau di-refactor (RecentsParserTest menjaganya).
+internal fun parseRecentEntry(entry: String): RecentFile? {
+    val firstSep = entry.indexOf('|')
+    val lastSep = entry.lastIndexOf('|')
+    if (firstSep < 0 || lastSep <= firstSep) return null
+    val uri = entry.substring(0, firstSep)
+    val name = entry.substring(firstSep + 1, lastSep)
+    val kindRaw = entry.substring(lastSep + 1)
+    val kind = try { Kind.valueOf(kindRaw) } catch (_: Exception) { Kind.CONFIG }
+    return RecentFile(uri, name, kind)
 }
