@@ -24,6 +24,15 @@ android {
         kotlinCompilerExtensionVersion = "2.4.10"
     }
 
+    signingConfigs {
+        create("config") {
+            storeFile = file(System.getenv("RELEASE_STORE_FILE") ?: "")
+            storePassword = System.getenv("RELEASE_STORE_PASS") ?: ""
+            keyAlias = System.getenv("RELEASE_KEY_ALIAS") ?: ""
+            keyPassword = System.getenv("RELEASE_KEY_PASS") ?: ""
+        }
+    }
+
     buildTypes {
         debug {
             isDebuggable = true
@@ -40,13 +49,8 @@ android {
         }
     }
 
-    signingConfigs {
-        create("config") {
-            storeFile = file(System.getenv("RELEASE_STORE_FILE") ?: "")
-            storePassword = System.getenv("RELEASE_STORE_PASS") ?: ""
-            keyAlias = System.getenv("RELEASE_KEY_ALIAS") ?: ""
-            keyPassword = System.getenv("RELEASE_KEY_PASS") ?: ""
-        }
+    composeOptions {
+        kotlinCompilerExtensionVersion = "2.4.10"
     }
 
     compileOptions {
