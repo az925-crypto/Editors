@@ -29,8 +29,13 @@ class BinaryGuardTest {
     }
 
     @Test
-    fun `elf magic ditolak`() {
-        val elf = byteArrayOf(0x7F.toByte(), 'E'.code.toByte(), 'L'.code.toByte(), 'F'.code.toByte())
+    fun `header elf dengan nul padding ditolak`() {
+        // Magic 4-byte ELF saja (0x7F 'E' 'L' 'F') valid UTF-8 — yang menolak file ELF nyata
+        // adalah NUL byte di e_ident padding setelahnya.
+        val elf = byteArrayOf(
+            0x7F.toByte(), 'E'.code.toByte(), 'L'.code.toByte(), 'F'.code.toByte(),
+            0x02.toByte(), 0x00.toByte(), 0x00.toByte()
+        )
         assertFalse(isUsableAsText(elf))
     }
 
