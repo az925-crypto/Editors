@@ -26,7 +26,9 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -42,10 +44,21 @@ import com.zaaam.editors.di.AppContainer
 import com.zaaam.editors.ui.components.SafDialog
 import com.zaaam.editors.ui.theme.RetroTokens
 
+// MEDIUM: SimpleDateFormat sebelumnya dibuat baru di setiap FileRow, tiap recompose — alokasi
+// tiap frame. Satu instance di-reuse untuk semua row (aman karena Compose UI cuma jalan di main
+// thread, jadi tidak butuh sinkronisasi lintas-thread untuk SimpleDateFormat yang not-thread-safe).
+private val fileDateFormat = java.text.SimpleDateFormat("d MMM", java.util.Locale("id"))
+
 @Composable
 fun FilesScreen(container: AppContainer) {
     val vm: FilesViewModel = viewModel { FilesViewModel(container) }
-    val state by vm.uiState.collectAsState()
+    val stateHolder = vm.uiState.collectAsState()
+    val state by stateHolder
+
+    // MEDIUM: derivedStateOf supaya filter cuma dihitung ulang kalau hasilnya beneran beda,
+    // bukan setiap kali FilesUiState berubah (mis. isLoading toggle) yang sebelumnya bikin
+    // filteredEntries() jalan tiap recompose dan drop frame di list panjang.
+    val filtered by remember { derivedStateOf { vm.filteredEntries(stateHolder.value) } }
 
     val picker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
@@ -185,7 +198,6 @@ fun FilesScreen(container: AppContainer) {
                     subtext = "Belum ada file di folder ini"
                 )
                 else -> {
-                    val filtered = vm.filteredEntries()
                     if (filtered.isEmpty() && state.query.isNotBlank()) {
                         Column(
                             modifier = Modifier.padding(16.dp),
@@ -393,8 +405,7 @@ private fun FileRow(entry: FsEntry, onClick: () -> Unit) {
                 text = buildString {
                     append("${entry.size / 1000} KB")
                     if (entry.lastModified > 0) {
-                        val sdf = java.text.SimpleDateFormat("d MMM", java.util.Locale("id"))
-                        append(" · ${sdf.format(java.util.Date(entry.lastModified))}")
+                        append(" · ${fileDateFormat.format(java.util.Date(entry.lastModified))}")
                     }
                     if (entry.isHidden) append(" ·hidden")
                 },

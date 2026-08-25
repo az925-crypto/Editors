@@ -18,10 +18,12 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -39,6 +41,9 @@ import com.zaaam.editors.ui.theme.RetroTokens
 import io.github.rosemoe.sora.event.ContentChangeEvent
 import io.github.rosemoe.sora.langs.textmate.TextMateLanguage
 import io.github.rosemoe.sora.langs.textmate.TextMateColorScheme
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @Composable
 fun EditorScreen(container: AppContainer) {
@@ -87,6 +92,33 @@ fun EditorScreen(container: AppContainer) {
         val themeMapper = remember { SoraThemeMapper() }
         val appliedScope = remember { mutableStateOf<String?>(null) }
 
+        // MEDIUM: cache TextMateLanguage per scope supaya pindah tab antar file berbahasa sama
+        // tidak membangun ulang grammar language dari nol tiap kali (hitch ~50ms).
+        val languageCache = remember { mutableMapOf<String, TextMateLanguage>() }
+
+        // MEDIUM: hanya push `content` ke editor waktu benar-benar pindah tab, bukan tiap
+        // recompose (mis. saat saveStatus berubah), supaya tidak toString() buffer besar tiap frame.
+        val lastAppliedContentUri = remember { mutableStateOf<String?>(null) }
+        val editorRef = remember { mutableStateOf<EditorEngine?>(null) }
+
+        // MEDIUM: debounce pengiriman perubahan konten dari tiap keystroke ke ViewModel supaya
+        // tidak toString() copy seluruh buffer di setiap event ketikan (double-copy OOM risk).
+        val pendingChangeJob = remember { mutableStateOf<Job?>(null) }
+        val coroutineScope = rememberCoroutineScope()
+
+        DisposableEffect(Unit) {
+            onDispose {
+                // Kalau layar ini dibongkar sebelum debounce sempat jalan, flush dulu biar
+                // ketikan terakhir user tidak hilang.
+                pendingChangeJob.value?.let { job ->
+                    if (job.isActive) {
+                        job.cancel()
+                        editorRef.value?.let { ed -> vm.onContentChange(ed.text.toString()) }
+                    }
+                }
+            }
+        }
+
         AndroidView(
             modifier = Modifier
                 .weight(1f)
@@ -94,33 +126,54 @@ fun EditorScreen(container: AppContainer) {
                 .background(RetroTokens.LcdBg),
             factory = { ctx ->
                 val editor = EditorEngine.create(ctx)
+                editorRef.value = editor
                 editor.layoutParams = ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT
                 )
                 try {
-                    EditorEngine.initTextMate(ctx)
+                    // CRITICAL 1: TextMate sudah di-preload di EditorsApp.onCreate (Dispatchers.IO).
+                    // Di sini cuma bikin color scheme dari registry yang sudah (atau lagi) di-load,
+                    // TIDAK memanggil initTextMate() lagi supaya main thread tidak nge-freeze.
                     val scheme: TextMateColorScheme = EditorEngine.createColorScheme()
                     themeMapper.applyChromeOverrides(scheme)
                     editor.setColorScheme(scheme)
                 } catch (_: Exception) {
+                    // Preload di background mungkin belum selesai — editor tetap jalan dengan
+                    // skema default, tidak fatal.
                 }
                 editor.subscribeEvent(ContentChangeEvent::class.java) { event, _ ->
                     if (event.action != ContentChangeEvent.ACTION_SET_NEW_TEXT) {
-                        vm.onContentChange(editor.text.toString())
+                        pendingChangeJob.value?.cancel()
+                        pendingChangeJob.value = coroutineScope.launch {
+                            delay(200)
+                            vm.onContentChange(editor.text.toString())
+                        }
                     }
                 }
                 editor
             },
             update = { editor ->
-                if (editor.text?.toString() != content) {
-                    editor.setText(content)
+                if (activeUri != lastAppliedContentUri.value) {
+                    // Pindah tab: flush dulu perubahan yang masih ditunda (debounce) dari tab
+                    // sebelumnya sebelum bufernya ditimpa oleh setText di bawah.
+                    pendingChangeJob.value?.let { job ->
+                        if (job.isActive) {
+                            job.cancel()
+                            vm.onContentChange(editor.text.toString())
+                        }
+                    }
+                    lastAppliedContentUri.value = activeUri
+                    if (editor.text?.toString() != content) {
+                        editor.setText(content)
+                    }
                 }
                 if (activeUri != null && appliedScope.value != activeUri) {
                     appliedScope.value = activeUri
                     try {
                         val scope = languageResolver.resolve(activeUri)
-                        editor.setEditorLanguage(TextMateLanguage.create(scope, true))
+                        val language = languageCache.getOrPut(scope) { TextMateLanguage.create(scope, true) }
+                        editor.setEditorLanguage(language)
                     } catch (_: Exception) {
                     }
                 }

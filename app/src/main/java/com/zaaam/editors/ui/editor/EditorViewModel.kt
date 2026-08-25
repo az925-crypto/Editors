@@ -32,7 +32,10 @@ class EditorViewModel(private val container: AppContainer) : ViewModel() {
     private val _uiState = MutableStateFlow(EditorUiState())
     val uiState: StateFlow<EditorUiState> = _uiState.asStateFlow()
 
-    private val contentMap = mutableMapOf<String, String>()
+    // CRITICAL 3: pakai map bersama di AppContainer (bukan map privat lokal) supaya konten
+    // yang ditulis FilesViewModel saat membuka file langsung kebaca EditorViewModel ini —
+    // dua ViewModel ini instance-nya beda, jadi kalau map-nya lokal isinya nggak akan ketemu.
+    private val contentMap get() = container.editorContents
     private var saveJob: Job? = null
 
     init {

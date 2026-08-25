@@ -10,12 +10,14 @@ import com.zaaam.editors.core.fs.Kind
 import com.zaaam.editors.di.AppContainer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 data class RecentFile(
     val uri: String,
@@ -46,7 +48,16 @@ class FilesViewModel(private val container: AppContainer) : ViewModel() {
     val uiState: StateFlow<FilesUiState> = _uiState.asStateFlow()
 
     private val queryFlow = MutableStateFlow("")
+
+    // CRITICAL 2: pathStack HANYA boleh disentuh dari Main thread. Semua fungsi di bawah
+    // memodifikasinya secara sinkron di badan fungsi (dijalankan Main lewat viewModelScope
+    // default dispatcher), dan IO cuma dipakai lewat withContext di dalam loadChildren.
     private val pathStack = mutableListOf<Uri>()
+
+    // CRITICAL 2: generasi + job dipakai supaya hasil loadChildren yang basi (folder yang
+    // sudah ditinggalkan user) tidak pernah ke-apply ke state, biar entries tidak ketuker.
+    private var loadJob: Job? = null
+    private var loadGeneration = 0
 
     init {
         viewModelScope.launch {
@@ -68,10 +79,13 @@ class FilesViewModel(private val container: AppContainer) : ViewModel() {
 
     fun onTreeUriSelected(uri: Uri) {
         _uiState.update { it.copy(isPicking = true, safError = null) }
-        viewModelScope.launch(Dispatchers.IO) {
-            when (val result = container.treeAccess.takePersistablePermission(uri)) {
+        viewModelScope.launch {
+            when (val result = withContext(Dispatchers.IO) { container.treeAccess.takePersistablePermission(uri) }) {
                 is FsResult.Success -> {
                     container.prefs.edit().putString("saf_tree_uri", uri.toString()).apply()
+                    // Main thread saja.
+                    pathStack.clear()
+                    pathStack.add(uri)
                     _uiState.update {
                         it.copy(
                             treeUri = uri,
@@ -84,8 +98,6 @@ class FilesViewModel(private val container: AppContainer) : ViewModel() {
                             safError = null
                         )
                     }
-                    pathStack.clear()
-                    pathStack.add(uri)
                     loadChildren(uri)
                 }
                 is FsResult.Error -> {
@@ -116,17 +128,16 @@ class FilesViewModel(private val container: AppContainer) : ViewModel() {
 
     fun navigateInto(entry: FsEntry) {
         if (!entry.isDir) return
-        viewModelScope.launch(Dispatchers.IO) {
-            pathStack.add(entry.uri)
-            _uiState.update {
-                it.copy(
-                    currentUri = entry.uri,
-                    pathSegments = it.pathSegments + entry.name,
-                    isLoading = true
-                )
-            }
-            loadChildren(entry.uri)
+        // Main thread saja — tidak ada lagi launch(Dispatchers.IO) yang membungkus mutasi ini.
+        pathStack.add(entry.uri)
+        _uiState.update {
+            it.copy(
+                currentUri = entry.uri,
+                pathSegments = it.pathSegments + entry.name,
+                isLoading = true
+            )
         }
+        loadChildren(entry.uri)
     }
 
     fun navigateToSegment(index: Int) {
@@ -140,9 +151,7 @@ class FilesViewModel(private val container: AppContainer) : ViewModel() {
                 isLoading = true
             )
         }
-        viewModelScope.launch(Dispatchers.IO) {
-            loadChildren(uri)
-        }
+        loadChildren(uri)
     }
 
     fun navigateUp(): Boolean {
@@ -156,9 +165,7 @@ class FilesViewModel(private val container: AppContainer) : ViewModel() {
                 isLoading = true
             )
         }
-        viewModelScope.launch(Dispatchers.IO) {
-            loadChildren(uri)
-        }
+        loadChildren(uri)
         return true
     }
 
@@ -167,7 +174,7 @@ class FilesViewModel(private val container: AppContainer) : ViewModel() {
             navigateInto(entry)
             return
         }
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch {
             if (entry.kind == Kind.BINARY) {
                 container.editorSession.addTab(
                     TabState(entry.uri.toString(), entry.name, binary = true)
@@ -177,6 +184,9 @@ class FilesViewModel(private val container: AppContainer) : ViewModel() {
             }
             when (val result = container.fileSystem.readText(entry.uri)) {
                 is FsResult.Success -> {
+                    // CRITICAL 3: tulis isi file ke map bersama SEBELUM addTab, supaya waktu
+                    // EditorViewModel baca tab yang baru dibuka, isinya sudah ada — bukan tab kosong.
+                    container.editorContents[entry.uri.toString()] = result.value
                     container.editorSession.addTab(
                         TabState(entry.uri.toString(), entry.name)
                     )
@@ -191,10 +201,12 @@ class FilesViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     fun openRecent(recent: RecentFile) {
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch {
             val uri = Uri.parse(recent.uri)
             when (val result = container.fileSystem.readText(uri)) {
                 is FsResult.Success -> {
+                    // CRITICAL 3: sama seperti openFile — isi map bersama dulu baru addTab.
+                    container.editorContents[recent.uri] = result.value
                     container.editorSession.addTab(
                         TabState(recent.uri, recent.name)
                     )
@@ -211,21 +223,34 @@ class FilesViewModel(private val container: AppContainer) : ViewModel() {
         _uiState.update { it.copy(permDenied = v) }
     }
 
-    fun filteredEntries(): List<FsEntry> {
-        val s = _uiState.value
-        var list = s.entries
-        if (!s.showHidden) list = list.filter { !it.isHidden }
-        if (s.query.isNotBlank()) {
-            val q = s.query.lowercase()
+    // MEDIUM: sekarang menerima state secara eksplisit supaya bisa dipanggil dari dalam
+    // derivedStateOf di FilesScreen (baca lewat State snapshot, bukan _uiState.value mentah),
+    // jadi hasilnya cuma dihitung ulang saat entries/showHidden/query beneran berubah.
+    fun filteredEntries(state: FilesUiState = _uiState.value): List<FsEntry> {
+        var list = state.entries
+        if (!state.showHidden) list = list.filter { !it.isHidden }
+        if (state.query.isNotBlank()) {
+            val q = state.query.lowercase()
             list = list.filter { it.name.lowercase().contains(q) }
         }
         return list
     }
 
     private fun loadChildren(parentUri: Uri) {
-        viewModelScope.launch(Dispatchers.IO) {
+        // CRITICAL 2: batalkan request folder sebelumnya yang masih jalan, dan tandai generasi
+        // baru supaya kalaupun request lama sempat selesai duluan, hasilnya tetap dibuang.
+        loadJob?.cancel()
+        val generation = ++loadGeneration
+        loadJob = viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, listError = null) }
-            when (val result = container.fileSystem.listChildren(parentUri)) {
+            val result = withContext(Dispatchers.IO) { container.fileSystem.listChildren(parentUri) }
+
+            // Kalau user sudah pindah folder lagi sebelum request ini kelar, buang hasilnya.
+            if (generation != loadGeneration || _uiState.value.currentUri != parentUri) {
+                return@launch
+            }
+
+            when (result) {
                 is FsResult.Success -> {
                     val sorted = result.value.sortedWith(
                         compareByDescending<FsEntry> { it.isDir }.thenBy { it.name.lowercase() }
@@ -263,14 +288,23 @@ class FilesViewModel(private val container: AppContainer) : ViewModel() {
 
     private fun loadRecents() {
         val set = container.prefs.getStringSet("recent_files", emptySet()) ?: emptySet()
-        val recents = set.mapNotNull { entry ->
-            val parts = entry.split("|")
-            if (parts.size >= 3) {
-                val kind = try { Kind.valueOf(parts[2]) } catch (_: Exception) { Kind.CONFIG }
-                RecentFile(parts[0], parts[1], kind)
-            } else null
-        }
+        val recents = set.mapNotNull { entry -> parseRecentEntry(entry) }
         _uiState.update { it.copy(recents = recents) }
+    }
+
+    // MEDIUM: nama file bisa mengandung "|", jadi split("|") biasa bisa pecah jadi lebih dari
+    // 3 bagian dan bikin field ketuker. Ambil bagian PERTAMA sebagai uri dan bagian TERAKHIR
+    // sebagai kind (keduanya dijamin tidak mengandung "|"), sisanya di tengah adalah nama file
+    // apa adanya — termasuk kalau ada "|" di dalamnya.
+    private fun parseRecentEntry(entry: String): RecentFile? {
+        val firstSep = entry.indexOf('|')
+        val lastSep = entry.lastIndexOf('|')
+        if (firstSep < 0 || lastSep <= firstSep) return null
+        val uri = entry.substring(0, firstSep)
+        val name = entry.substring(firstSep + 1, lastSep)
+        val kindRaw = entry.substring(lastSep + 1)
+        val kind = try { Kind.valueOf(kindRaw) } catch (_: Exception) { Kind.CONFIG }
+        return RecentFile(uri, name, kind)
     }
 
     private fun restoreTreeUri() {
@@ -287,10 +321,13 @@ class FilesViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 
+    // MEDIUM: docId formatnya "primary:Projects/sub" — ambil bagian SETELAH ":" terakhir
+    // ("Projects"), bukan yang pertama ("primary"), supaya breadcrumb tidak selalu nampilin
+    // nama root storage.
     private fun getDisplayName(uri: Uri): String {
         return try {
             val docId = android.provider.DocumentsContract.getTreeDocumentId(uri)
-            docId.split(":").firstOrNull() ?: "storage"
+            docId.substringAfterLast(":").ifBlank { "storage" }
         } catch (_: Exception) {
             "storage"
         }

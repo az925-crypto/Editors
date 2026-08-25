@@ -11,6 +11,7 @@ import com.zaaam.editors.session.AppScreen
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import java.util.concurrent.ConcurrentHashMap
 
 class AppContainer(application: Application) {
     val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
@@ -25,4 +26,8 @@ class AppContainer(application: Application) {
 
     val editorSession = EditorSession()
     val screenState = MutableStateFlow(AppScreen.FILES)
+
+    // Shared antara FilesViewModel (penulis) dan EditorViewModel (pembaca) supaya isi file
+    // yang baru dibuka langsung tersedia di editor, bukan cuma tab kosong. Lihat CRITICAL 3.
+    val editorContents: MutableMap<String, String> = ConcurrentHashMap()
 }
