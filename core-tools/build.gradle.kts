@@ -21,4 +21,5 @@ dependencies {
     implementation(project(":core-fs"))
 
     testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
 }
