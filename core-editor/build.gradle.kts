@@ -20,4 +20,7 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     api(libs.sora.editor)
     api(libs.sora.editor.language.textmate)
+
+    testImplementation(libs.junit)
+    testImplementation("org.jetbrains.kotlin:kotlin-test:2.4.10")
 }
