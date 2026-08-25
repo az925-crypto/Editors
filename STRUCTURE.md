@@ -2,7 +2,7 @@
 
 **Untuk:** AI/user berikutnya yang ambil alih development.
 **Cara pakai:** baca `PROGRESS.md` dulu (state, pending fix, aturan kerja), lalu pakai file ini sebagai peta untuk navigasi kode. Setiap file dijelaskan: apa isinya, kenapa ada, dan jebakan yang perlu diketahui sebelum menyentuhnya.
-**Update terakhir:** 2026-08-25, setelah batch Fase 4 preview live end-to-end + P2 refactor (autosave coordinator testable, unifikasi isWebFile, readBounded boundary test, grammar text.plain) + console bridge hardened + rilis v0.1.2 + reviewer loop blocking bersih.
+**Update terakhir:** 2026-08-26 — Phase 2 IN-FLIGHT: modul `:core-tools` (engine analyzer/duplikat/ganti-massal/heks/snippet) GREEN + reviewer engine BELUM jalan + UI belum dibangun. Rencana eksekusi lengkap: PROGRESS.md §PHASE 2 IN-FLIGHT. Mockup approved: `mockup/phase2.html`.
 
 ---
 
@@ -64,8 +64,9 @@ editors/
 │   └── release.yml             # Release APK saat tag v* / manual dispatch
 ├── app/                        # MODUL UTAMA: UI Compose + wiring ViewModel (lihat §3)
 ├── core-editor/                # MODUL: wrapper Sora code editor (lihat §4)
-├── core-fs/                    # MODUL: filesystem SAF (lihat §5)
+├── core-fs/                    # MODUL: filesystem SAF (lihat §5) — kini ada API bytes juga
 ├── core-preview/               # MODUL: compose HTML utk preview (lihat §6)
+├── core-tools/                 # MODUL BARU Phase 2: engine alat (lihat §6b) — UI in-flight
 ├── docs/
 │   ├── design-spec.md          # Spec visual RetroTokens/LCD — sumber kebenaran styling
 │   └── qa-manual.md            # Skrip QA manual v0.1.2 — refresh 2026-08-25 (preview live + console)
@@ -159,7 +160,7 @@ Namespace `com.zaaam.editors.core.fs`. Semua operasi IO murni SAF (DocumentsCont
 | File | Isi & hal penting |
 |---|---|
 | `FileKindResolver.kt` | Multi-class dalam satu file: • `FsEntry(name, uri, isDir, size, lastModified, isHidden, kind)` • `enum Kind { WEB, CODE, CONFIG, BINARY }` • `sealed FsResult<T>` Success/Error(exception) — pola error handling seluruh repo • `interface SafFileSystem` (listChildren/readText/writeText/mkdir/rename/delete) • `TreeAccess(contentResolver)`: `takePersistablePermission` coba READ\|WRITE lalu **fallback per-flag** catch SecurityException; `isPermissionValid` **wajib read DAN write** ter-persist • `HiddenFiles.isHidden/filter` • `FileKindResolver.resolve(ext→Kind)` & `stencilLabel(ext→2 huruf)` — pure function, tested • `FileOps(UndoPayload)` placeholder Fase lanjutan. |
-| `SafFileSystemImpl.kt` | Impl SafFileSystem, semua `withContext(Dispatchers.IO)` + try/catch → FsResult. `listChildren`: projection DocumentsContract, `cursor.use{}`. `readText`: precheck size >2MB tolak; provider tanpa COLUMN_SIZE (null/-1) → **streaming bounded manual** (`readBounded`, loop buffer 64KB setara readNBytes(MAX+1) — API 33-only jadi tidak dipakai langsung); hasil dicek **`isUsableAsText`** (internal top-level, tested: NUL byte / UTF-8 invalid → Error) supaya file biner tidak pernah masuk editor dan autosave tidak bisa merusaknya. `writeText`: stream null → **Error** (bukan Success palsu). `mkdir/rename/delete`: DocumentsContract standar. |
+| `SafFileSystemImpl.kt` | Impl SafFileSystem, semua `withContext(Dispatchers.IO)` + try/catch → FsResult. `listChildren`: projection DocumentsContract, `cursor.use{}`. `readText`: precheck size >2MB tolak; provider tanpa COLUMN_SIZE (null/-1) → **streaming bounded manual** (`readBounded`, loop buffer 64KB setara readNBytes(MAX+1) — API 33-only jadi tidak dipakai langsung); hasil dicek **`isUsableAsText`** (internal top-level, tested: NUL byte / UTF-8 invalid → Error) supaya file biner tidak pernah masuk editor dan autosave tidak bisa merusaknya. `writeText`: stream null → **Error** (bukan Success palsu). `mkdir/rename/delete`: DocumentsContract standar. **Phase 2:** + `statSize/readBytes(maxBytes)/writeBytes/createFile(parent,mime,name)` (additive, dipakai core-tools/hex/snippet) + SEMUA catch kini rethrow `CancellationException` dulu (cancel bukan error operasi). |
 
 ---
 
@@ -174,6 +175,24 @@ Namespace `com.zaaam.editors.core.preview`. Modul kecil, bergantung `:core-fs`.
 
 ---
 
+## 6b. Modul `:core-tools` — Phase 2 Engine (GREEN; UI in-flight)
+
+Namespace `com.zaaam.editors.core.tools`. Depend `:core-fs`. SEMUA engine murni: uri String + lambda injected (pola AutosaveCoordinator) supaya test JVM murni jalan. Rencana UI + keputusan user terkunci: PROGRESS.md §PHASE 2 IN-FLIGHT.
+
+| File | Isi & gotcha |
+|---|---|
+| `ToolModels.kt` | ToolNode(name, uri, **relPath**, isDir, size, isHidden) — relPath sintetis dari root DIBANGUN scanner (nested = bawa prefix: "assets/img/a.jpg"). Juga ToolProgress/AnalyzerReport/DuplicateGroup/DupesOutcome/MatchPreview/FileFindReport/ReplaceFileOutcome. Deklarasi model CUMA di sini (sempat dobel → Redeclaration). |
+| `TreeScanner.kt` | DFS ITERATIF explicit stack (anti stack-overflow); folder gagal = skippedDirs++, lanjut sibling; ensureActive() per iterasi; hidden difilter saat walk kalau includeHidden=false (tidak turun ke dalamnya); onProgress(ToolProgress(WALK,…)). |
+| `StorageAnalyzer.kt` | `aggregateAnalysis()` pure internal — largestFiles top-N + largestDirs agregat TOP-LEVEL via relPath.substringBefore("/"); anak langsung root = label "(akar)". |
+| `DuplicateFinder.kt` | 4 fase: group size (1..100MB) → head SHA-1 64KB → **re-statSize guard** (beda = changedDuringScan, exclude — anti klaim duplikat dari data basi, termasuk korban autosave sendiri) → full SHA-1. sha1Streaming manual buffer 64KB. File 0-byte & oversize skip (oversizedSkipped). TIDAK ada aksi hapus di v0.2 (keputusan user). |
+| `FindReplaceEngine.kt` | findMatches/replaceLiteral LITERAL indexOf — BUKAN Regex (metachar query aman), non-overlapping, maxPreviews membatasi preview tanpa bohongi total. Engine.scan → FileFindReport (outcome null = file tak terbaca/ditolak guard teks). **replaceVerified = re-read + bandingkan snapshot scan** → ChangedSkipped kalau beda (interaksi autosave!). BatchReplaceSummary Success/ChangedSkipped/Failed. |
+| `HexSupport.kt` | MAX_HEX_FILE_BYTES=16MB (save=tulis balik utuh karena SAF tak punya random-access write — seluruh isi WAJIB di memori saat simpan), HEX_UNDO_MAX=32, formatRow 16 byte/baris → ByteCell(hex uppercase, ascii printable-only else null). |
+| `Snippet.kt` | Snippet(id,name,language,tags,code,updatedAtMs); `SnippetJsonCodec` encode/parse schema `zaaam-snippets` v1 — escaper ketat (", \\, \n\r\t, kontrol <0x20 → \uXXXX); parser JsonMini strict (JSON null sah, field asing diabaikan, entry rusak = skippedInvalid, schema/version mismatch = BadSchema). Interface `SnippetExchange` = adapter point Codexa (**BLOCKED menunggu spec eksternal** — jangan tulis kode Codexa sebelum spec ada). |
+
+Test (semua GREEN): TreeScannerTest, StorageAnalyzerTest, DuplicateFinderTest, FindReplaceEngineTest (+pure fns), HexSupportTest, SnippetJsonCodecTest. coroutines-test WAJIB dideklarasikan eksplisit di build.gradle modul.
+
+---
+
 ## 7. Assets, Res, Build Files
 
 | Path | Isi |
@@ -182,11 +201,11 @@ Namespace `com.zaaam.editors.core.preview`. Modul kecil, bergantung `:core-fs`.
 | `app/src/main/assets/textmate/*.tmLanguage.json` | 7 grammar minimal buatan sendiri (bukan dump grammar resmi); `plain.tmLanguage.json` = patterns kosong utk fallback text.plain. |
 | `app/src/main/assets/textmate/themes/retro-lcd.json` | Theme format VSCode, palet LCD RetroTokens. |
 | `app/src/main/res/` | Launcher adaptive (mipmap + drawable vector), `values/colors.xml`, `strings.xml`, `themes.xml` (Theme.Zaaam). `res/font` kosong — fonts bundling masih backlog. |
-| `settings.gradle.kts` | `FAIL_ON_PROJECT_REPOS`; repos: **google() + mavenCentral() saja** (jitpack.io DIHAPUS 2026-08-25 — supply-chain risk, deps semua resolve dari dua repo itu). Modul: app, core-fs, core-editor, core-preview. TIDAK ADA core-tools (fitur Fase lanjutan, tidak dijanjikan di README). |
+| `settings.gradle.kts` | `FAIL_ON_PROJECT_REPOS`; repos: **google() + mavenCentral() saja** (jitpack.io DIHAPUS — supply-chain risk). Modul: app, core-fs, core-editor, core-preview, **core-tools** (Phase 2). TIDAK ADA core-tools versi lama/core-tools aspirasi lain. |
 | `build.gradle.kts` (root) | 4 plugin alias `apply false`: android-application, android-library, kotlin-android, kotlin-compose. |
 | `gradle.properties` | -Xmx4096m, caching + configuration-cache on, androidX, nonTransitiveRClass. |
 | `gradle/libs.versions.toml` | Satu-satunya sumber versi. AGP 9.3.0, Kotlin 2.4.10, composeBom 2026.06.00, material3 1.4.0 (eksplisit), coroutines 1.10.2 (+ `kotlinx-coroutines-test` kini DIPAKAI :app untuk AutosaveCoordinatorTest), sora 0.23.6, desugar 2.1.5, junit 4.13.2. |
-| `app/src/test/`, `core-*/src/test/` | **Test suite pure JVM (enforced CI `testDebugUnitTest`):** RecentsParserTest, LanguageResolverTest, FileKindResolverTest (+isWebFile, +HiddenFiles), BinaryGuardTest, **BoundedReadTest** (boundary streaming), PreviewComposerTest (escape varian + fallback append + pipeline single-injection), **ConsoleBridgeSupportTest** (level/truncate/rate-limiter sliding window), **AutosaveCoordinatorTest** (runTest virtual-time 9 kasus). Aturan: JANGAN konstruksi android.* di test; pure function dibuat internal top-level agar testable; coroutines-test pakai backgroundScope + StandardTestDispatcher(testScheduler). |
+| `app/src/test/`, `core-*/src/test/` | **Test suite pure JVM (enforced CI `testDebugUnitTest`):** RecentsParserTest, LanguageResolverTest, FileKindResolverTest (+isWebFile, +HiddenFiles), BinaryGuardTest, BoundedReadTest, PreviewComposerTest (escape varian + single-injection), ConsoleBridgeSupportTest, AutosaveCoordinatorTest (runTest), **+ core-tools: TreeScanner / StorageAnalyzer / DuplicateFinder / FindReplaceEngine / HexSupport / SnippetJsonCodec tests**. Aturan: JANGAN konstruksi android.* di test; pure function internal top-level agar testable; coroutines-test WAJIB dideklarasikan eksplisit di build.gradle modul. |
 | `.github/workflows/ci.yml` | push/PR main → JDK21 temurin + gradle cache → assembleDebug → testDebugUnitTest → lintDebug → upload reports & debug-apk (retention 7 hari). Ini SATU-SATUNYA cara verifikasi build (dilarang gradle lokal di Termux). |
 | `.github/workflows/release.yml` | Trigger tag `v*` + workflow_dispatch; `contents: write`; decode keystore opsional dari secret `RELEASE_KEYSTORE_B64` (fallback debug signing by design sampai keystore real dipasang); secrets via step-level `env:` (JANGAN `${{ secrets.* }}` inline di `run:`); nama APK dari `GITHUB_REF_NAME#v` **disanitasi whitelist `[A-Za-z0-9._-]`** (fix 2026-08-25); upload via softprops/action-gh-release v2. |
 
@@ -202,7 +221,8 @@ Namespace `com.zaaam.editors.core.preview`. Modul kecil, bergantung `:core-fs`.
 | `README.md` | FINAL (Divio: tutorial/how-to/reference/explanation) — klaim sinkron kode (Sora 0.23.6, tanpa core-tools). |
 | `docs/design-spec.md` | Spec visual lengkap (RetroTokens LCD, layout per layar, dialog SAF §9.5). Sumber kebenaran styling. |
 | `docs/qa-manual.md` | Skrip QA manual v0.1.2 — refresh 2026-08-25 pasca-Fase 4 (preview live, console bridge, autosave disk, flood test). |
-| `mockup/index.html` | Mockup full-app HTML. Workflow notes.txt #5: mockup + approval Telegram SEBELUM kerja UI baru. |
+| `mockup/index.html` | Mockup full-app v3 (approved) — sumber token & pola layar. |
+| `mockup/phase2.html` | Mockup Phase 2 (APPROVED user 2026-08-25): 6 pane ALAT — hub, analisa, duplikat, ganti massal, heks, snippet. UI Compose wajib mengikuti ini. |
 | `notes.txt` | Instruksi tetap dari user: build via CI saja, package naming, selalu rilis APK ke Releases, mockup-first untuk UI. |
 | ~~`ah.txt`~~ | Dihapus 2026-08-25 — snapshot handoff pra-Sora yang sudah digantikan PROGRESS.md (file untracked, tidak ada di git). |
 
@@ -212,7 +232,9 @@ Namespace `com.zaaam.editors.core.preview`. Modul kecil, bergantung `:core-fs`.
 
 Semua item besar tuntas & reviewer blocking bersih: Fase 1-5 infra/core/autosave/hardening (lihat PROGRESS.md), **Fase 4 preview live end-to-end** (wiring tick+seed, urlbar nyata, ↻ fungsional, console drawer spec, bridge rate-limited), P2 (AutosaveCoordinator testable, isWebFile unifikasi, openTab hapus, readBounded test, text.plain grammar), rilis v0.1.2 hijau + APK.
 
-Sisa terbuka (detail: PROGRESS.md §Backlog Aktif):
+**Phase 2 (2026-08-26): engine `:core-tools` GREEN (lihat §6b); reviewer engine BELUM jalan; UI 6 layar BELUM dibangun (mockup approved: mockup/phase2.html). Eksekusi lanjutan: PROGRESS.md §PHASE 2 IN-FLIGHT — itu sumber kebenaran, jangan mulai tanpa baca.**
+
+Sisa terbuka non-Phase-2 (detail: PROGRESS.md §Backlog Aktif):
 
 | Masalah | Lokasi | Prioritas |
 |---|---|---|
