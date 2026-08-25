@@ -24,8 +24,8 @@ data class ConsoleEntry(
 object PreviewComposer {
     fun compose(html: String, css: String?, js: String?): String {
         var doc = html
-        css?.let { doc = doc.replace("<link rel=\"stylesheet\" href=\"style.css\">", "<style>$it</style>") }
-        js?.let { doc = doc.replace("<script src=\"main.js\"><\/script>", "<scr" + "ipt>window.__zaaam_bridge = {post:function(l,m){window.ZaaamBridge.postMessage(JSON.stringify({l:l,m:m}))}};$it</scr" + "ipt>") }
+        css?.let { doc = doc.replace("<link rel=\"stylesheet\" href=\"style.css\">", "<style>" + it + "</style>") }
+        js?.let { doc = doc.replace("<script src=\"main.js\"></script>", "<script>window.__zaaam_bridge = {post:function(l,m){window.ZaaamBridge.postMessage(JSON.stringify({l:l,m:m}))}};" + it + "</script>") }
         return doc
     }
 }
