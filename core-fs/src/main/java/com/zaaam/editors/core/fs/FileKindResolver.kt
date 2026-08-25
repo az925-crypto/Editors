@@ -28,6 +28,13 @@ interface SafFileSystem {
     suspend fun mkdir(parentUri: Uri, name: String): FsResult<Uri>
     suspend fun rename(uri: Uri, newName: String): FsResult<Uri>
     suspend fun delete(uri: Uri): FsResult<Unit>
+
+    // Phase 2 (core-tools): tambahan additive — byte-oriented untuk hex editor/snippet export.
+    // TIDAK mengubah kontrak teks lama; semua caller lama aman.
+    suspend fun statSize(uri: Uri): FsResult<Long>
+    suspend fun readBytes(uri: Uri, maxBytes: Long): FsResult<ByteArray>
+    suspend fun writeBytes(uri: Uri, bytes: ByteArray): FsResult<Unit>
+    suspend fun createFile(parentUri: Uri, mimeType: String, displayName: String): FsResult<Uri>
 }
 
 class TreeAccess(private val contentResolver: android.content.ContentResolver) {

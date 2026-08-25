@@ -83,6 +83,8 @@ class SafFileSystemImpl(private val resolver: ContentResolver) : SafFileSystem {
                 }
             }
             FsResult.Success(list)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e // cancel bukan error operasi — jangan jadi FsResult.Error palsu
         } catch (e: Exception) {
             FsResult.Error(e)
         }
@@ -111,6 +113,8 @@ class SafFileSystemImpl(private val resolver: ContentResolver) : SafFileSystem {
                 }
                 FsResult.Success(String(bytes, Charsets.UTF_8))
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e // cancel bukan error operasi — jangan jadi FsResult.Error palsu
         } catch (e: Exception) {
             FsResult.Error(e)
         }
@@ -135,6 +139,8 @@ class SafFileSystemImpl(private val resolver: ContentResolver) : SafFileSystem {
                 ?: return@withContext FsResult.Error(Exception("Tidak bisa membuka file untuk ditulis"))
             stream.use { it.write(text.toByteArray()) }
             FsResult.Success(Unit)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e // cancel bukan error operasi — jangan jadi FsResult.Error palsu
         } catch (e: Exception) {
             FsResult.Error(e)
         }
@@ -144,6 +150,8 @@ class SafFileSystemImpl(private val resolver: ContentResolver) : SafFileSystem {
         try {
             val newDoc = DocumentsContract.createDocument(resolver, parentUri, DocumentsContract.Document.MIME_TYPE_DIR, name)
             if (newDoc != null) FsResult.Success(newDoc) else FsResult.Error(Exception("createDocument returned null"))
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e // cancel bukan error operasi — jangan jadi FsResult.Error palsu
         } catch (e: Exception) {
             FsResult.Error(e)
         }
@@ -153,6 +161,8 @@ class SafFileSystemImpl(private val resolver: ContentResolver) : SafFileSystem {
         try {
             val newUri = DocumentsContract.renameDocument(resolver, uri, newName)
             if (newUri != null) FsResult.Success(newUri) else FsResult.Success(uri)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e // cancel bukan error operasi — jangan jadi FsResult.Error palsu
         } catch (e: Exception) {
             FsResult.Error(e)
         }
@@ -162,8 +172,68 @@ class SafFileSystemImpl(private val resolver: ContentResolver) : SafFileSystem {
         try {
             DocumentsContract.deleteDocument(resolver, uri)
             FsResult.Success(Unit)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e // cancel bukan error operasi — jangan jadi FsResult.Error palsu
         } catch (e: Exception) {
             FsResult.Error(e)
         }
     }
+
+    override suspend fun statSize(uri: Uri): FsResult<Long> = withContext(Dispatchers.IO) {
+        try {
+            val size = querySize(uri)
+                ?: return@withContext FsResult.Error(Exception("Ukuran file tidak tersedia"))
+            FsResult.Success(size)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            FsResult.Error(e)
+        }
+    }
+
+    override suspend fun readBytes(uri: Uri, maxBytes: Long): FsResult<ByteArray> = withContext(Dispatchers.IO) {
+        try {
+            // Precheck size dulu (murah), lalu readBounded double-guard kalau provider tidak
+            // mengisi COLUMN_SIZE — pola sama dengan readText.
+            val size = querySize(uri)
+            if (size != null && size >= 0 && size > maxBytes) {
+                return@withContext FsResult.Error(
+                    Exception("File terlalu besar (${size / (1024 * 1024)}MB, maksimal ${maxBytes / (1024 * 1024)}MB)")
+                )
+            }
+            val stream = resolver.openInputStream(uri)
+                ?: return@withContext FsResult.Error(Exception("Tidak bisa membuka file"))
+            stream.use { ins -> FsResult.Success(readBounded(ins, maxBytes)) }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            FsResult.Error(e)
+        }
+    }
+
+    override suspend fun writeBytes(uri: Uri, bytes: ByteArray): FsResult<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val stream = resolver.openOutputStream(uri)
+                ?: return@withContext FsResult.Error(Exception("Tidak bisa membuka file untuk ditulis"))
+            stream.use { it.write(bytes) }
+            FsResult.Success(Unit)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            FsResult.Error(e)
+        }
+    }
+
+    override suspend fun createFile(parentUri: Uri, mimeType: String, displayName: String): FsResult<Uri> =
+        withContext(Dispatchers.IO) {
+            try {
+                val doc = DocumentsContract.createDocument(resolver, parentUri, mimeType, displayName)
+                if (doc != null) FsResult.Success(doc)
+                else FsResult.Error(Exception("createDocument returned null"))
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                FsResult.Error(e)
+            }
+        }
 }
