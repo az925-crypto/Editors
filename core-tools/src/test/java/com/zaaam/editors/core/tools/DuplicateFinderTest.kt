@@ -7,13 +7,14 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.ByteArrayInputStream
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class DuplicateFinderTest {
 
     private fun TestScope.finderOf(contents: Map<String, ByteArray>, sizesOverride: Map<String, Long?> = emptyMap()) =
         DuplicateFinder(
-            openStream = { uri -> contents[uri]?.let(::java.io.ByteArrayInputStream) },
+            openStream = { uri -> contents[uri]?.let(::ByteArrayInputStream) },
             statSize = { uri -> sizesOverride[uri] ?: contents[uri]?.size?.toLong() },
             ioDispatcher = StandardTestDispatcher(testScheduler)
         )
