@@ -3,7 +3,10 @@ package com.zaaam.editors.core.preview
 data class ConsoleEntry(
     val level: Level,
     val message: String,
-    val epochMs: Long
+    val epochMs: Long,
+    // Seq monotonik untuk key LazyColumn yang stabil saat list tercapai cap dan bergeser
+    // (tanpa key, shift index bikin seluruh row recompose tiap pesan baru).
+    val seq: Long = nextConsoleEntrySeq()
 ) {
     fun formattedTime(): String {
         val d = java.util.Date(epochMs)
@@ -21,12 +24,17 @@ data class ConsoleEntry(
     }
 }
 
+private val consoleEntrySeq = java.util.concurrent.atomic.AtomicLong(0)
+private fun nextConsoleEntrySeq(): Long = consoleEntrySeq.incrementAndGet()
+
 object PreviewComposer {
     // Konten user yang mengandung penutup tag (apapun casing) bisa menutup wrapper
     // <style>/<script> lebih awal dan menyuntik markup/eksekusi di luar kendali,
     // jadi fragmen yang disuntikkan di-escape dulu dengan menyisipkan backslash.
-    private val closeStyleTag = Regex("</style>", RegexOption.IGNORE_CASE)
-    private val closeScriptTag = Regex("</script>", RegexOption.IGNORE_CASE)
+    // \s* menutup varian valid per HTML parser seperti "</style >" / "</STYLE\t>" —
+    // tanpa itu, file craft-an bisa lolos escape dan mengeksekusi JS di preview.
+    private val closeStyleTag = Regex("</\\s*style\\s*>", RegexOption.IGNORE_CASE)
+    private val closeScriptTag = Regex("</\\s*script\\s*>", RegexOption.IGNORE_CASE)
 
     // Placeholder replace sengaja EXACT-STRING casing-sensitive — perilaku lama yang
     // dikunci PreviewComposerTest; jangan diubah jadi regex/case-insensitive.
@@ -78,16 +86,15 @@ object PreviewComposer {
 
     enum class StandaloneKind { CSS, JS }
 
-    // Dokumen scaffold untuk preview file .css/.js yang dibuka langsung (tanpa index.html):
-    // css dibungkus <style>, js dieksekusi di halaman kosong ber-instrumentasi console.
-    // Escape close-tag sama persis dengan jalur compose utama.
-    fun wrapStandaloneDocument(kind: StandaloneKind, content: String): String = when (kind) {
+    // Dokumen scaffold untuk preview file .css/.js yang dibuka langsung (tanpa index.html).
+    // Sengaja HANYA berisi placeholder — satu-satunya titik injeksi konten/instrumentasi
+    // adalah compose() lewat placeholder ini, sehingga user JS tereksekusi TEPAT SATU kali
+    // dan instrumentasi console terpasang TEPAT SATU kali (fix review: dulu scaffold
+    // menyuntik sendiri + compose append ulang = double eksekusi + log dobel).
+    fun wrapStandaloneDocument(kind: StandaloneKind): String = when (kind) {
         StandaloneKind.CSS ->
-            "<!DOCTYPE html><html><head><style>" +
-                escapeCloseTag(content, closeStyleTag) + "</style></head><body></body></html>"
+            "<!DOCTYPE html><html><head>" + CSS_PLACEHOLDER + "</head><body></body></html>"
         StandaloneKind.JS ->
-            "<!DOCTYPE html><html><head></head><body><script>" +
-                CONSOLE_INSTRUMENTATION + escapeCloseTag(content, closeScriptTag) +
-                "</script></body></html>"
+            "<!DOCTYPE html><html><head></head><body>" + JS_PLACEHOLDER + "</body></html>"
     }
 }

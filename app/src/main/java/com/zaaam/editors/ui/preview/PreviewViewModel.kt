@@ -6,6 +6,7 @@ import com.zaaam.editors.core.fs.isWebFile
 import com.zaaam.editors.core.preview.ConsoleEntry
 import com.zaaam.editors.core.preview.PreviewComposer
 import com.zaaam.editors.di.AppContainer
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -13,6 +14,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 data class PreviewUiState(
     val html: String = "",
@@ -71,8 +73,15 @@ class PreviewViewModel(private val container: AppContainer) : ViewModel() {
         debounceJob = viewModelScope.launch {
             delay(350)
             // Stale-guard: selama window debounce user bisa pindah tab/dokumen atau closeTab.
-            if (capturedUri != shownUri || capturedUri != container.editorSession.activeTab) return@launch
-            val content = container.editorContents[capturedUri] ?: return@launch
+            val stillRelevant = capturedUri == shownUri &&
+                capturedUri == container.editorSession.activeTab &&
+                container.editorContents.containsKey(capturedUri)
+            val content = if (stillRelevant) container.editorContents[capturedUri] else null
+            if (content == null) {
+                // FIX review (Low): jangan biarkan spinner "Memperbarui…" nyangkut di jalur abort.
+                _uiState.update { it.copy(isLoading = false) }
+                return@launch
+            }
             composeAndApply(capturedUri, content)
         }
     }
@@ -82,32 +91,54 @@ class PreviewViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     private fun composeAndApply(uri: String, content: String) {
-        // File .css/.js yang dibuka langsung dibungkus scaffold doc; .html dipakai apa adanya.
-        val docHtml = when (uri.substringAfterLast(".", "").lowercase()) {
-            "css" -> PreviewComposer.wrapStandaloneDocument(PreviewComposer.StandaloneKind.CSS, content)
-            "js" -> PreviewComposer.wrapStandaloneDocument(PreviewComposer.StandaloneKind.JS, content)
-            else -> content
+        val ext = uri.substringAfterLast(".", "").lowercase()
+        // Companion = isi tab web LAIN yang terbuka. File aktif standalone (.css/.js) masuk
+        // sebagai fragmen utama — scaffold hanya placeholder, sehingga compose() adalah
+        // satu-satunya titik injeksi (user JS tereksekusi tepat satu kali).
+        val otherCss = otherCssFragments(uri)
+        val otherJs = otherJsFragments(uri)
+        var docHtml = content
+        val cssFragment: String?
+        val jsFragment: String
+        when (ext) {
+            "css" -> {
+                docHtml = PreviewComposer.wrapStandaloneDocument(PreviewComposer.StandaloneKind.CSS)
+                cssFragment = listOf(content, otherCss).filter { it.isNotBlank() }.joinToString("\n").ifBlank { null }
+                jsFragment = otherJs
+            }
+            "js" -> {
+                docHtml = PreviewComposer.wrapStandaloneDocument(PreviewComposer.StandaloneKind.JS)
+                cssFragment = otherCss
+                jsFragment = listOf(content, otherJs).filter { it.isNotBlank() }.joinToString("\n")
+            }
+            else -> {
+                cssFragment = otherCss
+                jsFragment = otherJs
+            }
         }
-        val composed = PreviewComposer.compose(docHtml, companionCss(uri), companionJs())
-        shownUri = uri
-        _uiState.update { it.copy(html = composed, url = uri, isLoading = false) }
+        viewModelScope.launch {
+            // PERF (review Medium): escape regex + concat dokumen sampai 2MB jangan di Main.
+            val composed = withContext(Dispatchers.Default) {
+                PreviewComposer.compose(docHtml, cssFragment, jsFragment)
+            }
+            shownUri = uri
+            _uiState.update { it.copy(html = composed, url = uri, isLoading = false) }
+        }
     }
 
-    // Companion files: isi tab .css/.js lain yang TERBUKA digabung jadi satu fragmen — cukup
-    // untuk pola umum index.html + style.css + main.js (lihat mockup portfolio). Penyuntikan
-    // tetap mengikuti kontrak composer: replace placeholder exact-string, fallback append.
-    private fun companionCss(activeUri: String): String? =
+    private fun otherCssFragments(activeUri: String): String? =
         container.editorSession.tabs.value
             .filter { !it.binary && it.uri != activeUri && it.uri.endsWith(".css", ignoreCase = true) }
             .mapNotNull { container.editorContents[it.uri] }
             .joinToString("\n")
             .ifBlank { null }
 
-    // js sengaja SELALU non-null ("") — instrumentasi console harus terpasang untuk SEMUA
-    // preview, sementara kontrak identity compose(html, null, null) milik unit test tetap utuh.
-    private fun companionJs(): String =
+    // js sengaja SELALU non-null ("" saat kosong) — instrumentasi console harus terpasang
+    // untuk SEMUA preview; kontrak identity compose(html, null, null) milik unit test tetap
+    // utuh karena null hanya lewat jalur lama.
+    private fun otherJsFragments(activeUri: String): String =
         container.editorSession.tabs.value
-            .filter { !it.binary && it.uri.endsWith(".js", ignoreCase = true) }
+            .filter { !it.binary && it.uri != activeUri && it.uri.endsWith(".js", ignoreCase = true) }
             .mapNotNull { container.editorContents[it.uri] }
             .joinToString("\n")
             .ifBlank { "" }

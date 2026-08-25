@@ -168,28 +168,57 @@ class PreviewComposerTest {
     // --- Fase 4: dokumen standalone untuk file .css / .js langsung ---
 
     @Test
-    fun `wrapStandaloneDocument css membungkus style dan terescape`() {
-        val hasil = PreviewComposer.wrapStandaloneDocument(
-            PreviewComposer.StandaloneKind.CSS,
-            """p::after { content: "</STYLE>" }"""
-        )
+    fun `scaffold standalone hanya berisi placeholder tanpa konten`() {
+        val cssDoc = PreviewComposer.wrapStandaloneDocument(PreviewComposer.StandaloneKind.CSS)
+        val jsDoc = PreviewComposer.wrapStandaloneDocument(PreviewComposer.StandaloneKind.JS)
 
-        assertTrue(hasil.startsWith("<!DOCTYPE html>"))
-        assertTrue(hasil.contains("<style>"))
-        assertFalse(hasil.contains("</STYLE>"))
-        assertTrue(hasil.contains("<\\/STYLE>"))
+        assertTrue(cssDoc.startsWith("<!DOCTYPE html>"))
+        assertTrue(cssDoc.contains("""<link rel="stylesheet" href="style.css">"""))
+        assertFalse(cssDoc.contains("<script"))
+        assertTrue(jsDoc.startsWith("<!DOCTYPE html>"))
+        assertTrue(jsDoc.contains("""<script src="main.js"></script>"""))
+        assertFalse(jsDoc.contains("__zaaam_bridge"))
     }
 
     @Test
-    fun `wrapStandaloneDocument js membawa bridge dan terescape`() {
-        val hasil = PreviewComposer.wrapStandaloneDocument(
-            PreviewComposer.StandaloneKind.JS,
-            "var s = '</ScRiPt>';"
+    fun `pipeline js standalone tereksekusi tepat satu kali dengan satu instrumentasi`() {
+        // Regresi temuan review High: scaffold dulu menyuntik instrumentation+userJS lalu
+        // compose append ulang — user JS jalan 2x dan log dobel. Sekarang compose() adalah
+        // satu-satunya titik injeksi.
+        val doc = PreviewComposer.compose(
+            PreviewComposer.wrapStandaloneDocument(PreviewComposer.StandaloneKind.JS),
+            null,
+            "let n=0; n++; console.log(n);"
         )
 
-        assertTrue(hasil.startsWith("<!DOCTYPE html>"))
-        assertTrue(hasil.contains("window.__zaaam_bridge"))
-        assertFalse(hasil.contains("</ScRiPt>"))
-        assertTrue(hasil.contains("<\\/ScRiPt>"))
+        assertEquals(1, Regex("<script>").findAll(doc).count())
+        assertEquals(1, Regex("__zaaam_bridge = \\{").findAll(doc).count())
+        assertTrue(doc.contains("let n=0; n++; console.log(n);"))
+    }
+
+    @Test
+    fun `pipeline css standalone satu blok style dengan instrumentasi script`() {
+        val doc = PreviewComposer.compose(
+            PreviewComposer.wrapStandaloneDocument(PreviewComposer.StandaloneKind.CSS),
+            "body { background: #fff }",
+            ""
+        )
+
+        assertEquals(1, Regex("<style>").findAll(doc).count())
+        assertTrue(doc.contains("body { background: #fff }"))
+        assertEquals(1, Regex("__zaaam_bridge = \\{").findAll(doc).count())
+    }
+
+    // --- Escape varian penutup tag valid per HTML parser ---
+
+    @Test
+    fun `escape menutup varian spasi dan tab sebelum penutup style`() {
+        val hasil = PreviewComposer.compose(htmlDenganPlaceholder(), "p { } </STYLE >", null)
+        val hasil2 = PreviewComposer.compose(htmlDenganPlaceholder(), "p { } </style\t>", null)
+
+        assertFalse(hasil.contains("</STYLE >"))
+        assertTrue(hasil.contains("<\\/STYLE >"))
+        assertFalse(hasil2.contains("</style\t>"))
+        assertTrue(hasil2.contains("<\\/style\t>"))
     }
 }

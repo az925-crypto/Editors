@@ -77,14 +77,7 @@ class EditorViewModel(private val container: AppContainer) : ViewModel() {
                         container.editorSession.markSaved(event.uri)
                         if (_uiState.value.activeUri == event.uri) {
                             _uiState.update { it.copy(saveStatus = SaveStatus.Saved(timeNow())) }
-                            delay(2000)
-                            // Guard ganda: jangan turunkan LED kalau user mengetik lagi dalam
-                            // window 2 detik (status sudah balik Saving) atau pindah tab.
-                            if (_uiState.value.activeUri == event.uri &&
-                                _uiState.value.saveStatus is SaveStatus.Saved
-                            ) {
-                                _uiState.update { it.copy(saveStatus = SaveStatus.Idle) }
-                            }
+                            scheduleLedIdleReset(event.uri)
                         }
                     }
                     is AutosaveCoordinator.Event.Failed -> {
@@ -95,6 +88,19 @@ class EditorViewModel(private val container: AppContainer) : ViewModel() {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    // FIX review (Low): auto-clear LED jalan di job TERPISAH — delay(2000) di badan collect
+    // bikin head-of-line blocking (event autosave tab lain tertahan sampai 2 detik).
+    // Guard ganda tetap: jangan turunkan LED kalau user mengetik lagi (status bukan Saved)
+    // atau pindah tab.
+    private fun scheduleLedIdleReset(uri: String) {
+        viewModelScope.launch {
+            delay(2000)
+            if (_uiState.value.activeUri == uri && _uiState.value.saveStatus is SaveStatus.Saved) {
+                _uiState.update { it.copy(saveStatus = SaveStatus.Idle) }
             }
         }
     }

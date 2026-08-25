@@ -213,7 +213,9 @@ private fun ConsoleDrawer(
                 }
                 if (state.consoleExpanded) {
                     LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 8.dp)) {
-                        items(state.consoleEntries) { entry ->
+                        // Key seq monotonik — tanpa ini, saat list tercapai cap dan bergeser
+                        // seluruh row recompose tiap pesan baru (jank di low-end).
+                        items(state.consoleEntries, key = { it.seq }) { entry ->
                             ConsoleEntryRow(entry)
                         }
                     }
