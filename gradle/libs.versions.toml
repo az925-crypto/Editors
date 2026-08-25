@@ -24,7 +24,6 @@ kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutines" }
 # JitPack coordinates: com.github.<user>:<repo>:<version>
 sora-editor = { group = "com.github.Rosemoe", name = "Sora-Editor", version.ref = "soraEditor" }
-sora-textmate = { group = "com.github.Rosemoe", name = "Sora-Editor", version.ref = "soraEditor", classifier = "language-textmate" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 
 [plugins]

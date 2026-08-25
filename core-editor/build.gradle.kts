@@ -17,7 +17,6 @@ android {
 
 dependencies {
     implementation(libs.sora.editor)
-    implementation(libs.sora.textmate)
     implementation(libs.androidx.core.ktx)
     implementation(libs.kotlinx.coroutines.android)
 }
