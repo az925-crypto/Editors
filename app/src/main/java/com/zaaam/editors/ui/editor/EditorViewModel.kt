@@ -125,8 +125,15 @@ class EditorViewModel(private val container: AppContainer) : ViewModel() {
             }
             when (writeResult) {
                 is FsResult.Success -> {
-                    container.editorSession.markSaved(targetUri)
-                    if (_uiState.value.activeUri == targetUri) {
+                    // MEDIUM FIX (review): hanya klaim "Tersimpan" kalau snapshot yang barusan
+                    // ditulis masih yang terbaru di contentMap. Kalau user sudah mengetik lagi
+                    // selama IO jalan, biarkan dirty tetap menyala dan job berikutnya yang
+                    // menuntaskan LED — jangan bilang aman padahal ada edit yang belum ke disk.
+                    val stillCurrent = contentMap[targetUri] == newContent
+                    if (stillCurrent) {
+                        container.editorSession.markSaved(targetUri)
+                    }
+                    if (_uiState.value.activeUri == targetUri && stillCurrent) {
                         _uiState.update { it.copy(saveStatus = SaveStatus.Saved(timeNow())) }
                         delay(2000)
                         if (_uiState.value.activeUri == targetUri) {
