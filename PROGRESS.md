@@ -1,7 +1,7 @@
 # Progress & Handoff — zaaam/editors
 
-**Tanggal:** 2026-08-25
-**HEAD:** `37b9678` (main, pushed) — CI GREEN run `32837095359`
+**Tanggal:** 2026-08-25 (update: bersih-bersih dead code + STRUCTURE.md)
+**HEAD:** `7d23b56` (main) — WAJIB cek CI hijau dulu (`gh run list --limit 1`) sebelum lanjut fix apapun
 **Repo:** https://github.com/az925-crypto/Editors.git
 **Package:** `com.zaaam.editors` — minSdk 26 / targetSdk 36 / compileSdk 36 / Kotlin 2.4.10 / AGP 9.3.0 / Gradle 9.5.0 / JDK 21
 **Tag terakhir:** `v0.1.1` (`4383466`) — Release workflow HIJAU (run `32814065578`, APK debug-signed di Releases)
@@ -24,7 +24,9 @@
 7. **core-editor expose sora via `api()` bukan `implementation`** — app butuh classpath supertype CodeEditor.
 8. **Keystore release belum ada** → APK release pakai fallback debug signing (by design dulu). Real keystore via `gh secret set RELEASE_KEYSTORE_B64` + RELEASE_STORE_PASS/KEY_ALIAS/KEY_PASS.
 9. **release.yml sudah fixed** (commit `4383466`): secrets via step `env:` (jangan `${{ secrets.* }}` langsung di `run:` = command injection risk; `secrets` context ilegal di step-level `if`), trigger `push: tags v*` + `workflow_dispatch`. Uji: bump versionName/versionCode → push tag `vX.Y.Z`.
-10. **User sering benerin sendiri via zip** (`~/git/Editors-main-fixed*.zip`, export GitHub tanpa `.github`/dotfiles). Cara apply: `unzip -d /tmp/opencode/x`, `diff -rq` vs working tree (exclude .git/.github/.gitignore/tmp-apk/ah.txt), review diff, copy file yang relevan, jangan overwrite `.github`.
+10. **User sering benerin sendiri via zip** (`~/git/Editors-main-fixed*.zip`, export GitHub tanpa `.github`/dotfiles). Cara apply: `unzip -d /tmp/opencode/x`, `diff -rq` vs working tree (exclude `.git/.github/.gitignore/tmp-apk/`), review diff, copy file yang relevan, jangan overwrite `.github`.
+11. **Peta lengkap seluruh file + penjelasan per file: `STRUCTURE.md` (root)** — baca SEBELUM sentuh kode. Berisi: alur data inti, kontrak `editorContents`, isi/gotcha tiap file, lokasi tiap masalah terbuka, dan status file (aktif/reserved/dihapus).
+12. `ah.txt` sudah DIHAPUS (snapshot basi pra-Sora). `PreviewWebViewFactory.kt` + `addConsole()` DIPERTAHANKAN sebagai reserved fix security/Fase 4 — jangan dihapus lagi. Yang benar-benar sudah dibuang: 5 stub UI komponen + stub AutoSaveController (commit `7d23b56`).
 
 ---
 
@@ -37,6 +39,7 @@
 - **Fase 3 core-editor REAL:** `EditorEngine extends CodeEditor`, preload TextMate di `EditorsApp.onCreate` via `CoroutineScope(SupervisorJob()+Dispatchers.IO)` (idempotent @Synchronized), factory hanya createColorScheme+applyChromeOverrides, subscribeEvent ContentChangeEvent → debounce 200ms JobHolder + flush explicit-uri saat pindah tab/dispose, `lastAppliedContentUri` gate setText hanya saat pindah tab, `appliedScope` set-setelah-sukses (auto-retry highlight), languageCache per-scope. `SoraThemeMapper` chrome overrides (scrollbar/completion window/action window). Assets: `app/src/main/assets/textmate/` — themes/retro-lcd.json (VSCode format, palet LCD RetroTokens) + languages.json + 6 grammar custom minimal (html/css/js/kotlin/python/json).
 - **Fase 3 wiring:** `AppContainer.editorContents: ConcurrentHashMap` shared antara FilesViewModel (penulis, SEBELUM addTab) dan EditorViewModel (contentMap get() = editorContents). EditorScreen AndroidView(CodeEditor), save LED pill.
 - **Reviewer round 1+2:** security BLOCKING no; performance BLOCKING no (semua fix verified); bug-reviewer round 2 masih BLOCKING yes (lihat bawah).
+- **Cleanup dead code (`7d23b56`):** hapus 5 stub UI komponen (`ui/components/{Bevel,BootOverlay,BottomNavPhysical,HardwareBar,LedIndicator}.kt`) + stub `AutoSaveController` — semua verifikasi grep nol referensi. `PreviewWebViewFactory.kt`, `ConsoleBridge`, dan `addConsole()` DIPERTAHANKAN (reserved fix security WebView + Fase 4). `ah.txt` dihapus dari working tree. Peta file lengkap: **STRUCTURE.md**.
 
 ### ⚠️ PENDING FIX — bug-reviewer round 3 (VERIFIED REAL, bukan false positive)
 
@@ -114,27 +117,9 @@ if (_uiState.value.tabs.none { it.uri == targetUri }) return
 
 ---
 
-## FILE MAP (yang penting)
+## FILE MAP
 
-| File | Role |
-|---|---|
-| `app/src/main/java/com/zaaam/editors/EditorsApp.kt` | Application; preload TextMate IO |
-| `.../di/AppContainer.kt` | DI: prefs, fileSystem, treeAccess, editorContents (ConcurrentHashMap), editorSession, screenState |
-| `.../session/AppScreen.kt` | enum FILES/EDITOR/PREVIEW |
-| `.../ui/files/FilesViewModel.kt` | SAF state machine; pathStack main-only; loadJob+generation; recents pipe-safe |
-| `.../ui/files/FilesScreen.kt` | picker launcher, breadcrumb, skeleton, banner, remember(keys) filter, fileDateFormat top-level |
-| `.../ui/components/SafDialog.kt` | dialog SAF blocking spec §9.5 |
-| `.../ui/editor/EditorScreen.kt` | AndroidView CodeEditor; debounce+flush; languageCache; appliedScope retry |
-| `.../ui/editor/EditorViewModel.kt` | tabs/contentMap(=editorContents)/saveStatus; onContentChange(uri eksplisit) |
-| `core-editor/.../EditorEngine.kt` | extends CodeEditor; initTextMate idempotent; createColorScheme |
-| `core-editor/.../SoraThemeMapper.kt` | chrome overrides (schemes.EditorColorScheme) |
-| `core-editor/.../LanguageResolver.kt` | ext→scope textmate |
-| `core-fs/.../SafFileSystemImpl.kt` | SAF ops real; use{}; 2MB guard |
-| `core-fs/.../FileKindResolver.kt` | TreeAccess real; HiddenFiles; Kind; stencilLabel |
-| `app/src/main/assets/textmate/` | retro-lcd.json theme, languages.json, 6 grammar custom |
-| `gradle/libs.versions.toml` | soraEditor=0.23.6 Central; desugar=2.1.5 |
-| `.github/workflows/ci.yml` | push/PR main: assemble+test+lint+artifact |
-| `.github/workflows/release.yml` | tags v* + workflow_dispatch; secrets via env |
+Dipindah ke **STRUCTURE.md** (root) — peta lengkap per file beserta penjelasan, gotcha, dan lokasi masalah terbuka. Bagian ini tidak lagi dipelihara supaya tidak ada dua sumber kebenaran.
 
 ## RIWAYAT COMMIT SESI INI (baru)
 `df17cb5` SAF files real → `86d682c` Sora+assets+desugaring → `93ec18f` schemes import → `56077c0` api deps (CI GREEN pertama full feature) → `0fcb385` docs → `80841fd` reviewer loop 1 (user zip fix) → `37b9678` reaudit fix (user zip fix 2) — semuanya CI GREEN.
