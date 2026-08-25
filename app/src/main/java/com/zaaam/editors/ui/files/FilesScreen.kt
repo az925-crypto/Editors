@@ -33,8 +33,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.zaaam.editors.core.editor.TabState
 import com.zaaam.editors.core.fs.Kind
 import com.zaaam.editors.di.AppContainer
+import com.zaaam.editors.session.AppScreen
 import com.zaaam.editors.ui.theme.RetroTokens
 
 @Composable
@@ -80,7 +82,12 @@ fun FilesScreen(container: AppContainer) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             state.recents.take(3).forEach { name ->
                 Card(
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).clickable {
+                        val fileName = name.substringAfterLast("/")
+                        val uri = "content://dummy/$fileName"
+                        container.editorSession.addTab(TabState(uri, fileName))
+                        container.screenState.value = AppScreen.EDITOR
+                    },
                     colors = CardDefaults.cardColors(containerColor = RetroTokens.Card)
                 ) {
                     Text(text = name.substringAfterLast("/"), modifier = Modifier.padding(8.dp), fontSize = 12.sp)
@@ -109,7 +116,16 @@ fun FilesScreen(container: AppContainer) {
                 item { Text(text = "Tidak ada yang cocok", modifier = Modifier.padding(16.dp), color = RetroTokens.Dim) }
             } else {
                 items(filtered, key = { it.name }) { entry ->
-                    FileRow(entry = entry, onClick = {})
+                    FileRow(entry = entry, onClick = {
+                        if (entry.isDir) {
+                            vm.toggleDir(entry.name)
+                        } else {
+                            val uri = entry.uri.toString()
+                            val isBinary = entry.kind == Kind.BINARY
+                            container.editorSession.addTab(TabState(uri, entry.name, binary = isBinary))
+                            container.screenState.value = AppScreen.EDITOR
+                        }
+                    })
                 }
             }
         }
