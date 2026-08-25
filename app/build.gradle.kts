@@ -78,5 +78,4 @@ dependencies {
     implementation(project(":core-preview"))
 
     testImplementation(libs.junit)
-    testImplementation("org.jetbrains.kotlin:kotlin-test:2.4.10")
 }

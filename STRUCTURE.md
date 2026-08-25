@@ -2,7 +2,7 @@
 
 **Untuk:** AI/user berikutnya yang ambil alih development.
 **Cara pakai:** baca `PROGRESS.md` dulu (state, pending fix, aturan kerja), lalu pakai file ini sebagai peta untuk navigasi kode. Setiap file dijelaskan: apa isinya, kenapa ada, dan jebakan yang perlu diketahui sebelum menyentuhnya.
-**Update terakhir:** 2026-08-25, HEAD sesi ini setelah commit bersih-bersih dead code.
+**Update terakhir:** 2026-08-25, setelah batch eksekusi pending fix (autosave real, hardening security/perf, test suite) + reviewer loop bersih.
 
 ---
 
@@ -22,15 +22,19 @@ Aplikasi Android **code editor + file manager + live preview** untuk ngoding dar
 
 ```
 FilesScreen ──> FilesViewModel ──> SafFileSystemImpl (SAF/IO)
-                     │                     │
-                     │  tulis isi file     │
-                     ▼                     ▼
-             AppContainer.editorContents (ConcurrentHashMap, shared)
-                     │
-                     ▼
-             EditorViewModel.contentMap ──> EditorScreen (AndroidView CodeEditor)
-                     │                              │ ketikan (debounce 200ms)
-                     └────────── onContentChange <──┘   (MASIH memori-only, lihat §6)
+                      │                     │
+                      │  tulis isi file     │
+                      ▼                     ▼
+              AppContainer.editorContents (ConcurrentHashMap, shared)
+                      │
+                      ▼
+              EditorViewModel.contentMap ──> EditorScreen (AndroidView CodeEditor)
+                      │                              │ ketikan (debounce 200ms,
+                      │                              │  sourceUri di-capture saat event)
+                      └──────── onContentChange(uri,text) <──┘
+                      │
+                      └── debounce 900ms → fileSystem.writeText (IO, Mutex per-uri)
+                                              → LED Idle/Saving/Saved/Error dari FsResult
 
 EditorSession.tabs (StateFlow) ──> tab strip + LED status
 container.screenState (enum FILES/EDITOR/PREVIEW) ──> AppRoot switch layar
@@ -93,21 +97,21 @@ Package root: `com.zaaam.editors`. Semua UI Compose, Material3, tema kustom Retr
 
 | File | Isi & hal penting |
 |---|---|
-| `ui/files/FilesViewModel.kt` | Mesin state SAF. Kunci: `pathStack` **main-thread-only**, `loadJob.cancel() + loadGeneration` anti hasil basi lintas folder. `onTreeUriSelected` → `takePersistablePermission` (IO) → simpan `prefs["saf_tree_uri"]` → reset pathStack → loadChildren. `openFile`: BINARY early-return tanpa readText; sukses → tulis `editorContents` SEBELUM `addTab` → pindah layar EDITOR → upsertRecent. `openRecent`: BELUM punya guard BINARY/validasi scheme (backlog). `navigateUp()` ada tapi belum dipasang BackHandler (dead code sengaja disimpan). `restoreTreeUri` di init: cek permission via IPC **masih di main thread** (perf issue terbuka). Recents: format `uri|name|kind` di StringSet, parser `parseRecentEntry` aman nama-file-berpipe. |
-| `ui/files/FilesScreen.kt` | Launcher `OpenDocumentTree`, breadcrumb LazyRow (items tanpa key stabil — low), search debounce 200ms via `queryFlow`, FilterChip HIDDEN, banner permDenied gaya BrickWash, SkeletonLoader 8 baris, EmptyState, recents tray max 3 kartu. `filtered` di-remember dengan key eksplisit `(entries, showHidden, query)` — JANGAN diganti derivedStateOf membaca state utuh (regresi perf, komentar di file menjelaskan). `fileDateFormat` top-level reuse. `listError` ADA di state tapi BELUM dirender UI mana pun (backlog #5). |
+| `ui/files/FilesViewModel.kt` | Mesin state SAF. Kunci: `pathStack` **main-thread-only**, `loadJob.cancel() + loadGeneration` anti hasil basi lintas folder. `onTreeUriSelected` → `takePersistablePermission` (IO, fallback per-flag) → persist `prefs["saf_tree_uri"]` HANYA kalau read+write ter-persist (anti loop dialog SAF) → reset pathStack → loadChildren. `openFile`: BINARY early-return tanpa readText; sukses → tulis `editorContents` SEBELUM `addTab` → pindah layar EDITOR → upsertRecent. `openRecent`: guard scheme `content://` + guard BINARY (recents basi dari prefs aman). Pesan error UI generik (`MSG_OPEN_FAILED`/`MSG_LIST_FAILED` — exception.message tidak dibocorkan). `restoreTreeUri`: IPC `isPermissionValid` via withContext(IO). Recents: format `uri|name|kind`, parser **`parseRecentEntry` internal top-level** (tested di RecentsParserTest). |
+| `ui/files/FilesScreen.kt` | Launcher `OpenDocumentTree`, **BackHandler** (pathSegments>1 → navigateUp), breadcrumb LazyRow, search debounce 200ms via `queryFlow`, FilterChip HIDDEN, banner listError + banner permDenied gaya BrickWash, SkeletonLoader 8 baris, EmptyState, recents tray max 3 kartu. `filtered` di-remember dengan key eksplisit `(entries, showHidden, query)` — JANGAN diganti derivedStateOf membaca state utuh (regresi perf, komentar di file menjelaskan). |
 
 ### 3.3 Layar Editor
 
 | File | Isi & hal penting |
 |---|---|
-| `ui/editor/EditorScreen.kt` | Tab strip (Row + horizontalScroll, tombol ×), LED row saveStatus, dan AndroidView berisi `EditorEngine`. Bagian paling sensitif di repo: factory pasang `subscribeEvent(ContentChangeEvent)` → debounce 200ms via `JobHolder` (holder biasa, bukan Compose State — alasan di komentar). **RACE KRITIKAL MASIH OPEN di ~baris 158-166**: job debounce memanggil `onContentChange(text)` implisit-activeUri; kalau user ganti tab di tengah delay, teks tab lama nimpa slot tab baru. `update{}` hanya bekerja saat pindah tab: flush eksplisit `leavingUri` dulu, gate `lastAppliedContentUri`, setText kalau konten beda. `languageCache` per-scope; blok language apply set `appliedScope` SETELAH sukses (retry tiap recomposition — bisa storm saat preload belum siap, perf low terbuka). |
-| `ui/editor/EditorViewModel.kt` | `EditorUiState(tabs, activeUri, content, saveStatus)`; `SaveStatus` sealed: Idle/Saving/Saved(time) — BELUM ada varian Error. Collector init ikuti `editorSession.tabs` (**belum reset saveStatus saat ganti tab aktif** — bug M). `saveJob` masih global tunggal (`cancel()` tiap keystroke — bug M). **`onContentChange(uri, text)` SAVE MASIH FAKE**: cuma tulis `contentMap` + markDirty/markSaved lokal, TIDAK PERNAH `writeText` ke disk (backlog prioritas #1 — edit hilang saat restart). `closeTab` hapus `contentMap[uri]`; flush/debounce bisa me-resurrect entry (guard belum ada). Overload `onContentChange(text)` 1-arg (implisit activeUri) adalah API lama penyebab race — calon penghapusan saat fix. |
+| `ui/editor/EditorScreen.kt` | Tab strip (Row + horizontalScroll, tombol ×), LED row Idle/Saving/Saved/**Error** (Brick dot, pesan generik), dan AndroidView berisi `EditorEngine`. Factory pasang `subscribeEvent(ContentChangeEvent)` → debounce 200ms via `JobHolder` — **race antar-tab TERTUTUP**: `sourceUri` di-capture saat event, job hanya menulis kalau `lastAppliedContentUri == sourceUri`; flush pindah-tab/dispose selalu explicit-uri. Apply language TextMate kini di **LaunchedEffect(activeUri, textMateReady)** dengan backoff eksponensial max 8x (retry storm mati; ready-signal dari EditorEngine memicu retry segera setelah preload kelar). |
+| `ui/editor/EditorViewModel.kt` | `EditorUiState(tabs, activeUri, content, saveStatus)`; `SaveStatus`: Idle/Saving/Saved(time)/**Error**. Collector init reset saveStatus saat activeUri berganti. **Autosave REAL**: `onContentChange(uri, text)` (overload 1-arg implisit DIHAPUS — akar race) → guard tab-existence (anti-resurrect) + guard binary → `saveJobs: Map<String,Job>` per-uri, debounce 900ms → `writeText` di IO dalam **Mutex per-uri** (`saveLocks`, urutan tulis dijamin; job in-flight sengaja tidak di-cancel agar file tidak kepotong) → LED dari FsResult; markSaved/Saved hanya kalau snapshot tulis masih terbaru di contentMap. `closeTab` cancel job antre + hapus contentMap. `openTab()` ada tapi nol caller (backlog: hapus/pakai). |
 
 ### 3.4 Layar Preview
 
 | File | Isi & hal penting |
 |---|---|
-| `ui/preview/PreviewScreen.kt` | Gating `isWebFile(activeTab)`; URL bar teks statis + tombol ↻ tanpa aksi (placeholder); WebView **dibuat manual di sini dengan hardening minimal** (`javaScriptEnabled=true`, `allowFileAccess=false` saja) PADAHAL `PreviewWebViewFactory` hardened tersedia di core-preview — security M terbuka: samakan saat wiring preview live. `update{}` reload HTML TIAP recomposition (perf M terbuka — butuh guard last-loaded). Fallback demo HTML hardcoded. Console card expand/collapse 120dp + Clear. |
+| `ui/preview/PreviewScreen.kt` | Gating `isWebFile(activeTab)`; URL bar teks statis + tombol ↻ tanpa aksi (placeholder); WebView dibuat via **`PreviewWebViewFactory.create()` hardened** + `vm.addConsole` wired ke callback (bridge JS sendiri masih reserved Fase 4). Guard reload via `LastLoadedHtmlHolder`: `loadDataWithBaseURL` hanya kalau html benar-benar berubah. Fallback demo HTML hardcoded. Console card expand/collapse 120dp + Clear. |
 | `ui/preview/PreviewViewModel.kt` | `PreviewUiState(html, url, isLoading, consoleEntries, consoleExpanded)`. `loadHtml(html, css?, js?)`: debounce 350ms → `PreviewComposer.compose` → state.html. `addConsole/clearConsole/toggleConsole`. Catatan: `loadHtml` belum punya caller dari Editor (rantai live-preview putus; Fase 4). `addConsole` juga belum ada produsernya (reserved console drawer). |
 
 ### 3.5 Komponen & Tema
@@ -129,9 +133,9 @@ Namespace `com.zaaam.editors.core.editor`. Expose sora via `api()` (app butuh cl
 
 | File | Isi & hal penting |
 |---|---|
-| `EditorEngine.kt` | `class EditorEngine : CodeEditor`. `create(ctx)` factory. `initTextMate(app)` @Synchronized idempotent: `FileProviderRegistry.addFileProvider(AssetsFileResolver)` → `ThemeRegistry.loadTheme(ThemeModel(IThemeSource.fromInputStream(...retro-lcd)))` → `GrammarRegistry.loadGrammars("textmate/languages.json")`. `createColorScheme()` = `TextMateColorScheme.create(ThemeRegistry.getInstance())`. Gotcha import Sora: `EditorColorScheme` di `widget.schemes`, `IThemeSource` di `org.eclipse.tm4e.core.registry` (detail lengkap di PROGRESS.md §5). |
+| `EditorEngine.kt` | `class EditorEngine : CodeEditor`. `create(ctx)` factory. `initTextMate(app)` @Synchronized idempotent + **`textMateReady: StateFlow<Boolean>` ready-signal** (di-set true akhir initTextMate; dipakai EditorScreen untuk retry apply language segera). `createColorScheme()` = `TextMateColorScheme.create(ThemeRegistry.getInstance())`. Gotcha import Sora: `EditorColorScheme` di `widget.schemes`, `IThemeSource` di `org.eclipse.tm4e.core.registry` (detail lengkap di PROGRESS.md §5). |
 | `EditorSession.kt` | Source of truth tab: `TabState(uri, displayName, dirty, lastSavedAt, binary)`, `_tabs: MutableStateFlow<List<TabState>>`, `activeTab: String?` (var biasa). `addTab` dedupe by uri + set active; `markDirty/markSaved` map-copy list. |
-| `LanguageResolver.kt` | Ekstensi → scope TextMate: html/css/js/kotlin/python/json, fallback `"text.plain"`. Gotcha: `text.plain` TIDAK terdaftar di languages.json → catch pemanggil harus fallback `setEditorLanguage(null)` (belum dilakukan — backlog #3). |
+| `LanguageResolver.kt` | Ekstensi → scope TextMate: html/css/js/kotlin/python/json, fallback `"text.plain"`. Gotcha: `text.plain` TIDAK terdaftar di languages.json — apply language kini di LaunchedEffect backoff (retry terbatas), tapi tetap baik daftarkan plain grammar atau `setEditorLanguage(null)` (backlog). Tested: LanguageResolverTest. |
 | `SoraThemeMapper.kt` | Override warna chrome scrollbar/completion/action window dari RetroTokens ke ID `EditorColorScheme` yang sudah diverifikasi. |
 
 ---
@@ -142,8 +146,8 @@ Namespace `com.zaaam.editors.core.fs`. Semua operasi IO murni SAF (DocumentsCont
 
 | File | Isi & hal penting |
 |---|---|
-| `FileKindResolver.kt` | Multi-class dalam satu file: • `FsEntry(name, uri, isDir, size, lastModified, isHidden, kind)` • `enum Kind { WEB, CODE, CONFIG, BINARY }` • `sealed FsResult<T>` Success/Error(exception) — pola error handling seluruh repo • `interface SafFileSystem` (listChildren/readText/writeText/mkdir/rename/delete) • `TreeAccess(contentResolver)`: `takePersistablePermission(uri)` **selalu minta READ\|WRITE** tanpa cek flag aktual (security M terbuka), `isPermissionValid` **cuma cek isReadPermission** (security M terbuka) • `HiddenFiles.isHidden/filter` • `FileKindResolver.resolve(ext→Kind)` & `stencilLabel(ext→2 huruf)` — pure function, kandidat unit test termudah • `FileOps(UndoPayload)` placeholder Fase lanjutan. |
-| `SafFileSystemImpl.kt` | Impl SafFileSystem, semua `withContext(Dispatchers.IO)` + try/catch → FsResult. `listChildren`: projection DocumentsContract, `cursor.use{}`. `readText`: guard `MAX_TEXT_FILE_BYTES` (2MB) via `querySize` — **bypass kalau provider tidak isi COLUMN_SIZE (null/-1)** → file besar tetap dimuat utuh (security/perf M terbuka; fix: streaming readNBytes). `writeText`: `openOutputStream?.use{write}` — ⚠️ stream null tetap return Success (sharp edge, perhatikan saat implement autosave real: cek null → Error). `mkdir/rename/delete`: DocumentsContract standar. |
+| `FileKindResolver.kt` | Multi-class dalam satu file: • `FsEntry(name, uri, isDir, size, lastModified, isHidden, kind)` • `enum Kind { WEB, CODE, CONFIG, BINARY }` • `sealed FsResult<T>` Success/Error(exception) — pola error handling seluruh repo • `interface SafFileSystem` (listChildren/readText/writeText/mkdir/rename/delete) • `TreeAccess(contentResolver)`: `takePersistablePermission` coba READ\|WRITE lalu **fallback per-flag** catch SecurityException; `isPermissionValid` **wajib read DAN write** ter-persist • `HiddenFiles.isHidden/filter` • `FileKindResolver.resolve(ext→Kind)` & `stencilLabel(ext→2 huruf)` — pure function, tested • `FileOps(UndoPayload)` placeholder Fase lanjutan. |
+| `SafFileSystemImpl.kt` | Impl SafFileSystem, semua `withContext(Dispatchers.IO)` + try/catch → FsResult. `listChildren`: projection DocumentsContract, `cursor.use{}`. `readText`: precheck size >2MB tolak; provider tanpa COLUMN_SIZE (null/-1) → **streaming bounded manual** (`readBounded`, loop buffer 64KB setara readNBytes(MAX+1) — API 33-only jadi tidak dipakai langsung); hasil dicek **`isUsableAsText`** (internal top-level, tested: NUL byte / UTF-8 invalid → Error) supaya file biner tidak pernah masuk editor dan autosave tidak bisa merusaknya. `writeText`: stream null → **Error** (bukan Success palsu). `mkdir/rename/delete`: DocumentsContract standar. |
 
 ---
 
@@ -153,8 +157,8 @@ Namespace `com.zaaam.editors.core.preview`. Modul kecil, bergantung `:core-fs`.
 
 | File | Isi & hal penting |
 |---|---|
-| `PreviewComposer.kt` | `ConsoleEntry(level, message, epochMs)` + badge/formattedTime. `object PreviewComposer.compose(html, css?, js?)`: inline `<link stylesheet href="style.css">` → `<style>…` dan `<script src="main.js">` → inline + bridge `window.__zaaam_bridge`. **BELUM escape `</script>`/`</style>`** dari konten user (security M terbuka — fix: replace case-insensitive ke `<\/script`). Pure string → kandidat unit test termudah. |
-| `PreviewWebViewFactory.kt` | **RESERVED — jangan hapus.** `ConsoleBridge(@JavascriptInterface postMessage)` + `PreviewWebViewFactory.create(context){}`: WebView hardened penuh (allowFileAccess/allowContentAccess/FileAccessFromFileURLs/UniversalAccessFromFileURLs=false, safeBrowsingEnabled=true, WebViewClient). Saat ini 0 pemakaian karena PreviewScreen bikin WebView sendiri — wiring-nya adalah bagian fix security + Fase 4 (console drawer). Catatan desain: jangan sembarang `addJavascriptInterface` bridge ke konten user tanpa rate-limit/origin rule. |
+| `PreviewComposer.kt` | `ConsoleEntry(level, message, epochMs)` + badge/formattedTime. `object PreviewComposer.compose(html, css?, js?)`: inline `<link stylesheet href="style.css">` → `<style>…` dan `<script src="main.js">` → inline + bridge `window.__zaaam_bridge`. Fragmen css/js di-escape dulu: **`</style>`/`</script>` case-insensitive → `<\/style>`/`<\/script>`** (tested di PreviewComposerTest). Catatan wiring Fase 4: placeholder match exact-string casing-sensitive; pasangan nama bridge JS↔interface (`__zaaam_bridge`↔`ZaaamBridge`) hanya terdokumentasi di string JS. |
+| `PreviewWebViewFactory.kt` | **DIPAKAI PreviewScreen sejak batch 2026-08-25** (tetap jangan dihapus). `ConsoleBridge(@JavascriptInterface postMessage)` + `PreviewWebViewFactory.create(context){}`: WebView hardened penuh (allowFileAccess/allowContentAccess/FileAccessFromFileURLs/UniversalAccessFromFileURLs=false, safeBrowsingEnabled=true, WebViewClient + **shouldOverrideUrlLoading selalu true** — navigasi keluar diblokir). Param `onConsole` sudah ter-wire ke vm.addConsole, tapi ConsoleBridge BELUM di-addJavascriptInterface (reserved Fase 4 — jangan sembarang tambah tanpa rate-limit/origin rule). |
 
 ---
 
@@ -166,12 +170,13 @@ Namespace `com.zaaam.editors.core.preview`. Modul kecil, bergantung `:core-fs`.
 | `app/src/main/assets/textmate/*.tmLanguage.json` | 6 grammar minimal buatan sendiri (bukan dump grammar resmi). |
 | `app/src/main/assets/textmate/themes/retro-lcd.json` | Theme format VSCode, palet LCD RetroTokens. |
 | `app/src/main/res/` | Launcher adaptive (mipmap + drawable vector), `values/colors.xml`, `strings.xml`, `themes.xml` (Theme.Zaaam). `res/font` kosong — fonts bundling masih backlog. |
-| `settings.gradle.kts` | `FAIL_ON_PROJECT_REPOS`; repos: google(), mavenCentral(), **jitpack.io** (dicatat reviewer sbg supply-chain risk — deps aktual semuanya Central; kandidat dihapus). Modul: app, core-fs, core-editor, core-preview. TIDAK ADA core-tools (yang di README = aspirasi). |
+| `settings.gradle.kts` | `FAIL_ON_PROJECT_REPOS`; repos: **google() + mavenCentral() saja** (jitpack.io DIHAPUS 2026-08-25 — supply-chain risk, deps semua resolve dari dua repo itu). Modul: app, core-fs, core-editor, core-preview. TIDAK ADA core-tools (yang di README = aspirasi). |
 | `build.gradle.kts` (root) | 4 plugin alias `apply false`: android-application, android-library, kotlin-android, kotlin-compose. |
 | `gradle.properties` | -Xmx4096m, caching + configuration-cache on, androidX, nonTransitiveRClass. |
-| `gradle/libs.versions.toml` | Satu-satunya sumber versi. AGP 9.3.0, Kotlin 2.4.10, composeBom 2026.06.00, material3 1.4.0 (eksplisit), coroutines 1.10.2 (+ artifacts `kotlinx-coroutines-test` TERDAFTAR tapi belum direferensi modul mana pun — siap dipakai infra test), sora 0.23.6, desugar 2.1.5, junit 4.13.2. |
+| `gradle/libs.versions.toml` | Satu-satunya sumber versi. AGP 9.3.0, Kotlin 2.4.10, composeBom 2026.06.00, material3 1.4.0 (eksplisit), coroutines 1.10.2 (+ artifacts `kotlinx-coroutines-test` TERDAFTAR tapi belum direferensi modul mana pun — siap dipakai test autosave coordinator), sora 0.23.6, desugar 2.1.5, junit 4.13.2 (satu-satunya dep test — kotlin-test dead dep sudah dihapus dari 4 modul). |
+| `app/src/test/`, `core-*/src/test/` | **Test suite pure JVM (enforced CI `testDebugUnitTest`):** RecentsParserTest (parser recents pipe-safe), LanguageResolverTest, FileKindResolverTest (+HiddenFiles), BinaryGuardTest (guard anti-korupsi biner), PreviewComposerTest (escape close-tag). Aturan: JANGAN konstruksi android.* di test (not mocked); pure function dibuat `internal` top-level agar testable. |
 | `.github/workflows/ci.yml` | push/PR main → JDK21 temurin + gradle cache → assembleDebug → testDebugUnitTest → lintDebug → upload reports & debug-apk (retention 7 hari). Ini SATU-SATUNYA cara verifikasi build (dilarang gradle lokal di Termux). |
-| `.github/workflows/release.yml` | Trigger tag `v*` + workflow_dispatch; `contents: write`; decode keystore opsional dari secret `RELEASE_KEYSTORE_B64` (fallback debug signing by design sampai keystore real dipasang); secrets via step-level `env:` (JANGAN `${{ secrets.* }}` inline di `run:`); nama APK dari `GITHUB_REF_NAME#v` (sanitasi karakter belum ada — security L terbuka); upload via softprops/action-gh-release v2. |
+| `.github/workflows/release.yml` | Trigger tag `v*` + workflow_dispatch; `contents: write`; decode keystore opsional dari secret `RELEASE_KEYSTORE_B64` (fallback debug signing by design sampai keystore real dipasang); secrets via step-level `env:` (JANGAN `${{ secrets.* }}` inline di `run:`); nama APK dari `GITHUB_REF_NAME#v` **disanitasi whitelist `[A-Za-z0-9._-]`** (fix 2026-08-25); upload via softprops/action-gh-release v2. |
 
 ---
 
@@ -191,31 +196,24 @@ Namespace `com.zaaam.editors.core.preview`. Modul kecil, bergantung `:core-fs`.
 
 ---
 
-## 9. Status Cepat Masalah Terbuka (ringkas)
+## 9. Status Cepat Masalah (state pasca-batch 2026-08-25)
 
-Detail lengkap + snippet fix: **PROGRESS.md**. Lokasi kodenya:
+Semua item di daftar lama (race debounce, save fake, saveJob global, collector reset, resurrect, over-grant permission, isPermissionValid read-only, WebView mentah, escape composer, bypass 2MB, reload WebView, IPC main thread, retry storm, BackHandler, openRecent guard, listError, sanitasi VERSION, jitpack, test suite kosong) sudah **FIXED + diverifikasi reviewer** (security no / bug round-2 no / perf no / maintainability sehat). Detail: PROGRESS.md §Backlog Aktif.
 
-| Masalah | Lokasi | Severity |
+Sisa terbuka:
+
+| Masalah | Lokasi | Prioritas |
 |---|---|---|
-| Race debounce implicit-uri (korupsi antar-tab) | `EditorScreen.kt` ~158-166 | Critical |
-| Save FAKE — tak pernah `writeText` ke disk | `EditorViewModel.onContentChange` | High (backlog #1) |
-| saveJob global tunggal | `EditorViewModel.kt` :39/:88 | Medium |
-| Collector tak reset saveStatus | `EditorViewModel.kt` :41-49 | Medium |
-| Resurrect contentMap entry setelah closeTab | `EditorViewModel.closeTab/onContentChange` | Low |
-| Over-grant persistable permission READ\|WRITE | `FileKindResolver.kt` :34-44 | Medium |
-| isPermissionValid cuma cek read | `FileKindResolver.kt` :58-66 | Medium |
-| WebView mentah vs factory hardened | `PreviewScreen.kt` :77-85 vs `PreviewWebViewFactory.kt` | Medium |
-| Escape `</script>`/`</style>` | `PreviewComposer.kt` :27-28 | Medium |
-| Guard 2MB bypass (size null/-1) | `SafFileSystemImpl.readText` :51-66 | Medium |
-| Reload WebView tiap recomposition | `PreviewScreen.kt` update{} | Medium (perf) |
-| Copy buffer 2MB di main tiap debounce | `EditorScreen.kt` subscribeEvent | Medium (perf) |
-| IPC permission di main saat cold start | `FilesViewModel.restoreTreeUri` | Medium (perf) |
-| Retry storm appliedScope saat preload belum siap | `EditorScreen.kt` blok language | Low (perf) |
-| BackHandler hilang (navigateUp dead) | `FilesScreen.kt` + `FilesViewModel.navigateUp` | Backlog #2 |
-| Fallback `text.plain` tak terdaftar | `languages.json` + `LanguageResolver` | Backlog #3 |
-| openRecent tanpa guard BINARY/scheme | `FilesViewModel.openRecent` | Backlog #4 |
-| listError tak pernah dirender | `FilesScreen.kt` | Backlog #5 |
-| Test suite kosong total (0 src/test) | semua modul | Maintainability High |
+| Preview live belum wired (loadHtml tak ada caller; bridge reserved) | `PreviewViewModel`/`EditorScreen` | P2 (Fase 4) |
+| Autosave coordinator tak bisa di-unit-test (tangled ke VM) | `EditorViewModel.onContentChange` | P2 |
+| `isWebFile` duplikat 2 ViewModel | EditorViewModel/PreviewViewModel | P2 |
+| `openTab()` dead code trap (`isBinary=false` default) | `EditorViewModel.kt` | P2 |
+| `readBounded` private, boundary test belum ada | `SafFileSystemImpl.kt` | P2 |
+| Ketikan ≤200ms sebelum closeTab dibuang (by design anti-resurrect) | EditorScreen×EditorViewModel | Low |
+| Full-copy buffer ~2MB per window debounce di Main (amortized) | `EditorScreen.kt` subscribeEvent | Low |
+| Fallback language `text.plain` tidak terdaftar | languages.json | Backlog |
+| Fonts bundling (`res/font` kosong) | res/font | Backlog |
+| Release v0.1.2 + README final + qa-manual refresh | root | Rilis |
 
 ---
 

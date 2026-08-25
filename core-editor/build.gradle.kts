@@ -22,5 +22,4 @@ dependencies {
     api(libs.sora.editor.language.textmate)
 
     testImplementation(libs.junit)
-    testImplementation("org.jetbrains.kotlin:kotlin-test:2.4.10")
 }
