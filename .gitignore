@@ -10,3 +10,4 @@ captures/
 *.keystore
 !debug.keystore
 .DS_Store
+tmp-apk/

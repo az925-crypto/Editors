@@ -41,8 +41,3 @@ class EditorSession {
     }
 }
 
-class AutoSaveController {
-    fun schedule(uri: String, onSave: () -> Unit) {
-        onSave()
-    }
-}
