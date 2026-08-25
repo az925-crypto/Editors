@@ -10,6 +10,9 @@ import io.github.rosemoe.sora.langs.textmate.registry.ThemeRegistry
 import io.github.rosemoe.sora.langs.textmate.registry.model.ThemeModel
 import io.github.rosemoe.sora.langs.textmate.registry.provider.AssetsFileResolver
 import io.github.rosemoe.sora.widget.CodeEditor
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 @Keep
 class EditorEngine private constructor(
@@ -21,6 +24,12 @@ class EditorEngine private constructor(
     companion object {
         @Volatile
         private var textMateInitialized = false
+
+        // MEDIUM FIX (retry storm): sinyal publik "preload TextMate selesai". UI (EditorScreen)
+        // memakai ini untuk mencoba apply language tepat setelah preload kelar, alih-alih
+        // menebak-nebak lewat recomposition.
+        private val _textMateReady = MutableStateFlow(false)
+        val textMateReady: StateFlow<Boolean> = _textMateReady.asStateFlow()
 
         @JvmStatic
         fun create(context: Context): EditorEngine = EditorEngine(context)
@@ -45,6 +54,7 @@ class EditorEngine private constructor(
             ThemeRegistry.getInstance().setTheme("retro-lcd")
             GrammarRegistry.getInstance().loadGrammars("textmate/languages.json")
             textMateInitialized = true
+            _textMateReady.value = true
         }
 
         @JvmStatic

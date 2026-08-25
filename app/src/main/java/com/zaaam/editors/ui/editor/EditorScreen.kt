@@ -19,6 +19,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -51,6 +52,13 @@ import kotlinx.coroutines.launch
 private class JobHolder {
     var value: Job? = null
 }
+
+// MEDIUM FIX (retry storm): batas + backoff retry apply language TextMate. Dulu update{}
+// mencoba ulang di SETIAP recomposition sampai preload kelar (bisa ratusan kali per detik).
+private const val LANGUAGE_APPLY_MAX_ATTEMPTS = 8
+
+private fun languageRetryDelayMs(attempt: Int): Long =
+    minOf(250L shl attempt.coerceAtMost(3), 2000L)
 
 @Composable
 fun EditorScreen(container: AppContainer) {
@@ -108,6 +116,11 @@ fun EditorScreen(container: AppContainer) {
         val lastAppliedContentUri = remember { mutableStateOf<String?>(null) }
         val editorRef = remember { mutableStateOf<EditorEngine?>(null) }
 
+        // MEDIUM FIX (retry storm): sinyal "preload TextMate sudah selesai" dari EditorsApp —
+        // flip false→true memicu LaunchedEffect di bawah mencoba apply language lagi segera,
+        // alih-alih nunggu recomposition apa pun.
+        val textMateReady by EditorEngine.textMateReady.collectAsState()
+
         // LOW FIX (80841fd re-audit): sebelumnya pakai mutableStateOf<Job?>, jadi tiap kali Job
         // baru di-assign (nyaris tiap keystroke, karena event dibatalkan+dibuat ulang tiap
         // ContentChangeEvent) itu tercatat sebagai state read di dalam AndroidView.update{} —
@@ -157,10 +170,20 @@ fun EditorScreen(container: AppContainer) {
                 }
                 editor.subscribeEvent(ContentChangeEvent::class.java) { event, _ ->
                     if (event.action != ContentChangeEvent.ACTION_SET_NEW_TEXT) {
+                        // CRITICAL FIX (race debounce): URI sumber DI-CAPTURE saat event terjadi,
+                        // bukan dibaca ulang setelah delay. Timeline korupsi lama: ketik di A →
+                        // delay(200) jalan → user pindah ke tab B → job resume dan menulis teks A
+                        // lewat activeUri implisit (sudah B) → contentMap[B] tertimpa teks A.
+                        // Guard `lastAppliedContentUri == sourceUri`: kalau update{} sudah ganti
+                        // tab, skip (flush leavingUri sudah handle); kalau job menang race, tulis
+                        // EKSPLISIT ke tab sumber.
+                        val sourceUri = lastAppliedContentUri.value
                         pendingChangeJob.value?.cancel()
                         pendingChangeJob.value = coroutineScope.launch {
                             delay(200)
-                            vm.onContentChange(editor.text.toString())
+                            if (lastAppliedContentUri.value == sourceUri) {
+                                vm.onContentChange(sourceUri, editor.text.toString())
+                            }
                         }
                     }
                 }
@@ -187,34 +210,42 @@ fun EditorScreen(container: AppContainer) {
                         editor.setText(content)
                     }
                 }
-                if (activeUri != null && appliedScope.value != activeUri) {
-                    // LOW FIX (80841fd re-audit): sebelumnya appliedScope.value ditandai
-                    // "applied" SEBELUM try — jadi kalau TextMate registry belum kelar preload
-                    // (race dengan EditorsApp.onCreate, paling gampang kena di tab pertama waktu
-                    // cold start), setEditorLanguage gagal & editor fallback ke plain text, tapi
-                    // guard di atas sudah kepalang bilang "sudah diterapkan" sehingga tidak
-                    // pernah dicoba ulang — file itu macet tanpa highlight sampai tab ditutup &
-                    // dibuka lagi. Sekarang appliedScope.value cuma di-set SETELAH sukses, jadi
-                    // kalau gagal, update berikutnya (recomposition apa pun) akan otomatis coba
-                    // lagi sampai berhasil.
-                    try {
-                        val scope = languageResolver.resolve(activeUri)
-                        val language = languageCache.getOrPut(scope) { TextMateLanguage.create(scope, true) }
-                        editor.setEditorLanguage(language)
-                        appliedScope.value = activeUri
-                    } catch (_: Exception) {
-                        // Belum siap — biarkan appliedScope.value beda dari activeUri supaya
-                        // di-retry, bukan macet permanen di plain text.
-                    }
-                }
             }
         )
 
+        // MEDIUM FIX (retry storm): apply language TextMate dipindah dari update{} ke
+        // LaunchedEffect dengan backoff eksponensial. Dulu tiap recomposition mencoba ulang
+        // kalau appliedScope gagal — saat preload TextMate belum kelar, itu jadi retry storm.
+        // Sekarang: retry terbatas + delay naik, dan flip textMateReady (preload selesai di
+        // EditorsApp) langsung memicu percobaan baru tanpa nunggu recomposition.
+        LaunchedEffect(activeUri, textMateReady) {
+            val ed = editorRef.value ?: return@LaunchedEffect
+            if (activeUri == null || appliedScope.value == activeUri) return@LaunchedEffect
+            var attempt = 0
+            while (appliedScope.value != activeUri && attempt < LANGUAGE_APPLY_MAX_ATTEMPTS) {
+                try {
+                    val scope = languageResolver.resolve(activeUri)
+                    val language = languageCache.getOrPut(scope) { TextMateLanguage.create(scope, true) }
+                    ed.setEditorLanguage(language)
+                    appliedScope.value = activeUri
+                } catch (_: Exception) {
+                    attempt++
+                    if (attempt < LANGUAGE_APPLY_MAX_ATTEMPTS) delay(languageRetryDelayMs(attempt))
+                }
+            }
+        }
+
         if (state.saveStatus != SaveStatus.Idle) {
             Row(modifier = Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Box(modifier = Modifier.size(6.dp).clip(RoundedCornerShape(3.dp)).background(when (state.saveStatus) { is SaveStatus.Saving -> RetroTokens.LedOrange; is SaveStatus.Saved -> RetroTokens.LedGreen; else -> Color.Transparent }))
+                Box(modifier = Modifier.size(6.dp).clip(RoundedCornerShape(3.dp)).background(when (state.saveStatus) { is SaveStatus.Saving -> RetroTokens.LedOrange; is SaveStatus.Saved -> RetroTokens.LedGreen; is SaveStatus.Error -> RetroTokens.Brick; else -> Color.Transparent }))
                 Text(
-                    text = when (val s = state.saveStatus) { is SaveStatus.Saving -> "Menyimpan…"; is SaveStatus.Saved -> "Tersimpan ${s.time}"; else -> "" },
+                    text = when (val s = state.saveStatus) {
+                        is SaveStatus.Saving -> "Menyimpan…"
+                        is SaveStatus.Saved -> "Tersimpan ${s.time}"
+                        // Pesan sengaja generik — detail exception tidak dibocorkan ke UI.
+                        is SaveStatus.Error -> "Gagal menyimpan"
+                        else -> ""
+                    },
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     color = RetroTokens.Dim
