@@ -1,6 +1,5 @@
 package com.zaaam.editors.ui.preview
 
-import android.webkit.WebView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -22,6 +21,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -32,8 +32,17 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.zaaam.editors.core.preview.ConsoleEntry
+import com.zaaam.editors.core.preview.PreviewWebViewFactory
 import com.zaaam.editors.di.AppContainer
 import com.zaaam.editors.ui.theme.RetroTokens
+
+// MEDIUM FIX: holder biasa (bukan Compose State) untuk html terakhir yang benar-benar
+// dimuat ke WebView — pola sama dengan JobHolder di EditorScreen. Perubahan nilainya
+// murni imperatif lintas-lambda (factory & update), tidak boleh memicu invokasi ulang
+// AndroidView.update{} sendiri.
+private class LastLoadedHtmlHolder {
+    var value: String? = null
+}
 
 @Composable
 fun PreviewScreen(container: AppContainer) {
@@ -74,14 +83,25 @@ fun PreviewScreen(container: AppContainer) {
                 <body><h1>Halo, dari HP.<br>Ditulir di <span style="color:#e8930c">zaaam/editors</span>.</h1><p>Edit kode ini di tab Editor, lalu balik ke sini.</p><button onclick="console.log('diklik '+Date.now())">Diklik</button></body></html>
                 """.trimIndent()
             }
+            val lastLoadedHtml = remember { LastLoadedHtmlHolder() }
             AndroidView(factory = { ctx ->
-                WebView(ctx).apply {
-                    settings.javaScriptEnabled = true
-                    settings.allowFileAccess = false
+                // SECURITY MEDIUM FIX: pakai PreviewWebViewFactory yang hardened penuh
+                // (allowContentAccess=false, akses file dari file URL dimatikan,
+                // safeBrowsingEnabled=true) alih-alih WebView manual hardening minimal.
+                // addJavascriptInterface sengaja belum ditambah — reserved Fase 4.
+                PreviewWebViewFactory().create(ctx) { entry -> vm.addConsole(entry) }.apply {
                     loadDataWithBaseURL(null, html, "text/html", "utf-8", null)
+                    // Catat html awal supaya recomposition pertama tidak me-reload dua kali.
+                    lastLoadedHtml.value = html
                 }
             }, update = { webView ->
-                webView.loadDataWithBaseURL(null, html, "text/html", "utf-8", null)
+                // PERF MEDIUM FIX: hanya muat ulang kalau html benar-benar berubah,
+                // bukan tiap recomposition (state lain seperti isLoading/consoleEntries
+                // juga memicu update{}).
+                if (html != lastLoadedHtml.value) {
+                    webView.loadDataWithBaseURL(null, html, "text/html", "utf-8", null)
+                    lastLoadedHtml.value = html
+                }
             }, modifier = Modifier.fillMaxSize())
         }
         Card(
