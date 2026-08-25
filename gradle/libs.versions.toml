@@ -6,7 +6,7 @@ activityCompose = "1.13.0"
 coreKtx = "1.18.0"
 lifecycle = "2.10.0"
 coroutines = "1.10.2"
-soraEditor = "0.24.6"
+# soraEditor = "0.24.6"  -- JitPack timeout, try original Maven coords or disable for now
 junit = "4.13.2"
 
 [libraries]
@@ -22,8 +22,7 @@ compose-foundation = { group = "androidx.compose.foundation", name = "foundation
 compose-material3 = { group = "androidx.compose.material3", name = "material3", version = "1.4.0" }
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutines" }
-# JitPack coordinates: com.github.<user>:<repo>:<version>
-sora-editor = { group = "com.github.Rosemoe", name = "Sora-Editor", version.ref = "soraEditor" }
+# sora-editor = { group = "com.github.Rosemoe", name = "Sora-Editor", version.ref = "soraEditor" } -- disabled, JitPack timeout
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 
 [plugins]

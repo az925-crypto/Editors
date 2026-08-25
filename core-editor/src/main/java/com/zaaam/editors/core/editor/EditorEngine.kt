@@ -2,25 +2,30 @@ package com.zaaam.editors.core.editor
 
 import android.content.Context
 import android.graphics.Typeface
+import android.text.Editable
+import android.text.TextWatcher
+import android.util.AttributeSet
+import android.widget.EditText
 import androidx.annotation.Keep
-import io.github.rosemoe.sora.widget.CodeEditor
 import kotlinx.coroutines.CoroutineDispatcher
 
 @Keep
 class EditorEngine @JvmOverloads constructor(
     context: Context,
-    monoTypeface: Typeface? = null,
-    ioDispatcher: CoroutineDispatcher
-) : CodeEditor(context) {
+    attrs: AttributeSet? = null,
+    defStyleAttr: Int = 0,
+    private val monoTypeface: Typeface? = null,
+    private val ioDispatcher: CoroutineDispatcher
+) : EditText(context, attrs, defStyleAttr) {
     init {
-        setTextIsSelectable(false)
+        isTextSelectable = false
         monoTypeface?.also { setTypeface(it) }
     }
 
     companion object {
         @JvmStatic
         fun create(context: Context, monoTypeface: Typeface? = null, ioDispatcher: CoroutineDispatcher): EditorEngine {
-            return EditorEngine(context, monoTypeface, ioDispatcher)
+            return EditorEngine(context, null, 0, monoTypeface, ioDispatcher)
         }
     }
 }
