@@ -34,7 +34,7 @@ class HexSupportTest {
 
         assertEquals(16, row0.size)
         assertEquals("00", row0[0].hex)
-        assertEquals('A', row2[9].ascii) // offset 32+9=41 = 'A'
+        assertEquals(')', row2[9].ascii) // offset 41 → NILAI byte 41 = ')'
         assertTrue(row3.isEmpty())
     }
 

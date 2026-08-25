@@ -34,7 +34,7 @@ class TreeScannerTest {
         )
         val result = scannerOf(tree).walk("root", includeHidden = true)
 
-        assertEquals(setOf("readme.md", "hero.png", "assets/img/a.jpg"), result.files.map { it.relPath }.toSet())
+        assertEquals(setOf("readme.md", "assets/hero.png", "assets/img/a.jpg"), result.files.map { it.relPath }.toSet())
         assertEquals(setOf("assets", "assets/img"), result.dirs.map { it.relPath }.toSet())
         assertEquals(0, result.stats.skippedDirs)
     }
