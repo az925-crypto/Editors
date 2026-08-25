@@ -31,16 +31,27 @@ interface SafFileSystem {
 }
 
 class TreeAccess(private val contentResolver: android.content.ContentResolver) {
+    // SECURITY FIX: dulu selalu minta READ|WRITE sekaligus walau grant aktual dari picker cuma
+    // satu flag — provider bisa menolak seluruh permintaan (SecurityException) padahal read
+    // saja cukup. Sekarang: coba dua-duanya, kalau ditolak fallback per-flag.
     suspend fun takePersistablePermission(uri: Uri): FsResult<Unit> {
+        val bothFlags = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
+            android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
         return try {
-            contentResolver.takePersistableUriPermission(
-                uri,
-                android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-            )
+            contentResolver.takePersistableUriPermission(uri, bothFlags)
             FsResult.Success(Unit)
         } catch (e: SecurityException) {
-            FsResult.Error(e)
+            tryTake(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                ?: tryTake(uri, android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+                ?: FsResult.Error(e)
         }
+    }
+
+    private fun tryTake(uri: Uri, flags: Int): FsResult<Unit>? = try {
+        contentResolver.takePersistableUriPermission(uri, flags)
+        FsResult.Success(Unit)
+    } catch (_: SecurityException) {
+        null
     }
 
     suspend fun releasePermission(uri: Uri): FsResult<Unit> {
@@ -57,9 +68,10 @@ class TreeAccess(private val contentResolver: android.content.ContentResolver) {
 
     fun isPermissionValid(uri: Uri): Boolean {
         return try {
-            contentResolver.persistedUriPermissions.any {
-                it.uri == uri && it.isReadPermission
-            }
+            // SECURITY FIX: dulu cuma cek isReadPermission — revoke write tidak terdeteksi dan
+            // autosave gagal diam-diam. Editor butuh baca+tulis, jadi keduanya wajib persisted.
+            val perms = contentResolver.persistedUriPermissions.filter { it.uri == uri }
+            perms.any { it.isReadPermission } && perms.any { it.isWritePermission }
         } catch (e: Exception) {
             false
         }

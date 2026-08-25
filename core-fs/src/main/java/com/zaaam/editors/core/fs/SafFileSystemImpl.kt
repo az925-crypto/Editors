@@ -53,16 +53,41 @@ class SafFileSystemImpl(private val resolver: ContentResolver) : SafFileSystem {
             // CRITICAL 4: cek COLUMN_SIZE dulu sebelum baca isi file. Kalau lebih dari 2MB,
             // tolak dengan pesan error yang jelas alih-alih langsung baca semua ke memori.
             val size = querySize(uri)
-            if (size != null && size > MAX_TEXT_FILE_BYTES) {
+            if (size != null && size >= 0 && size > MAX_TEXT_FILE_BYTES) {
                 return@withContext FsResult.Error(
                     Exception("File terlalu besar untuk dibuka (${size / (1024 * 1024)}MB, maksimal 2MB)")
                 )
             }
-            val text = resolver.openInputStream(uri)?.use { it.bufferedReader().readText() } ?: ""
-            FsResult.Success(text)
+            val stream = resolver.openInputStream(uri)
+                ?: return@withContext FsResult.Error(Exception("Tidak bisa membuka file"))
+            stream.use { ins ->
+                // SECURITY/PERF FIX: kalau provider tidak mengisi COLUMN_SIZE (null/negatif),
+                // jangan baca buta — baca streaming berbatas: stop di MAX+1 byte lalu tolak.
+                // Setara readNBytes(MAX+1), tapi loop manual karena readNBytes baru ada di API 33
+                // sedangkan minSdk 26.
+                FsResult.Success(readBounded(ins, MAX_TEXT_FILE_BYTES))
+            }
         } catch (e: Exception) {
             FsResult.Error(e)
         }
+    }
+
+    // Bounded read setara InputStream.readNBytes(limit+1): melempar Exception begitu total
+    // byte melewati batas, supaya file raksasa tidak pernah termuat utuh ke memori.
+    private fun readBounded(stream: java.io.InputStream, limitBytes: Long): String {
+        val out = java.io.ByteArrayOutputStream()
+        val buf = ByteArray(64 * 1024)
+        var total = 0L
+        while (true) {
+            val n = stream.read(buf)
+            if (n < 0) break
+            total += n
+            if (total > limitBytes) {
+                throw Exception("File terlalu besar untuk dibuka (maksimal ${limitBytes / (1024 * 1024)}MB)")
+            }
+            out.write(buf, 0, n)
+        }
+        return out.toString("UTF-8")
     }
 
     private fun querySize(uri: Uri): Long? {
@@ -78,7 +103,11 @@ class SafFileSystemImpl(private val resolver: ContentResolver) : SafFileSystem {
 
     override suspend fun writeText(uri: Uri, text: String): FsResult<Unit> = withContext(Dispatchers.IO) {
         try {
-            resolver.openOutputStream(uri)?.use { it.write(text.toByteArray()) }
+            // HIGH FIX (autosave real): stream null berarti provider menolak menulis — TIDAK
+            // boleh dilaporkan Success; caller memakai FsResult ini untuk LED Saved/Error.
+            val stream = resolver.openOutputStream(uri)
+                ?: return@withContext FsResult.Error(Exception("Tidak bisa membuka file untuk ditulis"))
+            stream.use { it.write(text.toByteArray()) }
             FsResult.Success(Unit)
         } catch (e: Exception) {
             FsResult.Error(e)
