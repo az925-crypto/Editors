@@ -6,12 +6,17 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
@@ -29,6 +34,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -40,6 +47,7 @@ import com.zaaam.editors.core.editor.SoraThemeMapper
 import com.zaaam.editors.core.fs.isWebFile
 import com.zaaam.editors.di.AppContainer
 import com.zaaam.editors.session.AppScreen
+import com.zaaam.editors.ui.preview.PreviewViewModel
 import com.zaaam.editors.ui.theme.RetroTokens
 import io.github.rosemoe.sora.event.ContentChangeEvent
 import io.github.rosemoe.sora.langs.textmate.TextMateLanguage
@@ -66,6 +74,20 @@ private fun languageRetryDelayMs(attempt: Int): Long =
 fun EditorScreen(container: AppContainer) {
     val vm: EditorViewModel = viewModel { EditorViewModel(container) }
     val state by vm.uiState.collectAsState()
+
+    // Live preview split: instance PreviewViewModel yang SAMA dengan layar Preview
+    // (viewModel{} activity-scoped, tanpa NavHost) — pipeline tick→debounce→compose
+    // tetap satu; pane di bawah hanya konsumen render dari state yang sudah ada.
+    val previewVm: PreviewViewModel = viewModel { PreviewViewModel(container) }
+    val previewState by previewVm.uiState.collectAsState()
+    val splitEnabled by container.splitPreviewEnabled.collectAsState()
+
+    // Seed instan dokumen aktif ke shared VM saat tab berganti (kontrak sama dengan
+    // LaunchedEffect(activeUri) milik PreviewScreen) supaya pane tidak menunggu tick
+    // pertama ketika split baru dinyalakan / pindah antar file web.
+    LaunchedEffect(state.activeUri) {
+        if (isWebFile(state.activeUri)) previewVm.showActiveFile(state.activeUri)
+    }
 
     if (state.tabs.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize().background(RetroTokens.Shell), contentAlignment = Alignment.Center) {
@@ -100,16 +122,35 @@ fun EditorScreen(container: AppContainer) {
         Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(text = "Find", modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(RetroTokens.Card).padding(horizontal = 12.dp, vertical = 6.dp), fontSize = 12.sp, color = RetroTokens.Dim)
             if (isWebFile(state.activeUri)) {
-                // Fase 4: chip kini fungsional — lompat langsung ke layar Preview.
-                Text(
-                    text = "Preview ▶",
-                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(RetroTokens.Olive).clickable {
-                        container.screenState.value = AppScreen.PREVIEW
-                    }.padding(horizontal = 12.dp, vertical = 6.dp),
-                    fontSize = 12.sp,
-                    color = RetroTokens.Ink,
-                    fontWeight = FontWeight.Bold
-                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // WHY chip hanya untuk file web: non-web (kt/txt/biner) tidak punya
+                    // html untuk di-preview — pane kosong cuma jadi noise visual.
+                    val splitOn = splitEnabled
+                    Text(
+                        text = "Split ◫",
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (splitOn) RetroTokens.Olive else RetroTokens.Card)
+                            .semantics {
+                                contentDescription = if (splitOn) "Matikan pratinjau terbagi" else "Aktifkan pratinjau terbagi"
+                            }
+                            .clickable { container.setSplitPreview(!splitOn) }
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        fontSize = 12.sp,
+                        color = if (splitOn) RetroTokens.Ink else RetroTokens.Dim,
+                        fontWeight = if (splitOn) FontWeight.Bold else FontWeight.Normal
+                    )
+                    // Fase 4: chip kini fungsional — lompat langsung ke layar Preview.
+                    Text(
+                        text = "Preview ▶",
+                        modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(RetroTokens.Olive).clickable {
+                            container.screenState.value = AppScreen.PREVIEW
+                        }.padding(horizontal = 12.dp, vertical = 6.dp),
+                        fontSize = 12.sp,
+                        color = RetroTokens.Ink,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
         }
         val activeUri = state.activeUri
@@ -156,11 +197,20 @@ fun EditorScreen(container: AppContainer) {
             }
         }
 
-        AndroidView(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                .background(RetroTokens.LcdBg),
+        // WHY SATU BoxWithConstraints sebagai parent editor+pane: node AndroidView sora
+        // tidak boleh pindah parent composable saat rotasi/aktif-nonaktif split — kalau
+        // pindah, factory dijalankan ulang dan state editor (cursor/undo) hilang. Posisi
+        // diatur via alignment + fraction pada MODIFIER, bukan ganti Column/Row root.
+        val showSplit = splitEnabled && isWebFile(state.activeUri)
+        BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            val isPortrait = maxWidth < maxHeight
+            val editorModifier = when {
+                !showSplit -> Modifier.fillMaxSize().background(RetroTokens.LcdBg)
+                isPortrait -> Modifier.align(Alignment.TopStart).fillMaxWidth().fillMaxHeight(0.5f).background(RetroTokens.LcdBg)
+                else -> Modifier.align(Alignment.CenterStart).fillMaxHeight().fillMaxWidth(0.5f).background(RetroTokens.LcdBg)
+            }
+            AndroidView(
+                modifier = editorModifier,
             factory = { ctx ->
                 val editor = EditorEngine.create(ctx)
                 editorRef.value = editor
@@ -222,7 +272,45 @@ fun EditorScreen(container: AppContainer) {
                     }
                 }
             }
-        )
+            )
+            if (showSplit) {
+                // WHY divider 1.dp Border (bukan shadow/elevation): bahasa visual retro-lcd
+                // pakai hairline, bukan elevasi Material. Posisi = garis batas fraksi 0.5.
+                if (isPortrait) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .fillMaxWidth()
+                            .offset(y = maxHeight * 0.5f)
+                            .height(1.dp)
+                            .background(RetroTokens.Border)
+                    )
+                    SplitPreviewPane(
+                        activeDisplayName = state.tabs.firstOrNull { it.uri == state.activeUri }?.displayName ?: "",
+                        renderedHtml = previewState.html,
+                        isLoading = previewState.isLoading,
+                        onConsole = previewVm::addConsole,
+                        modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth().fillMaxHeight(0.5f)
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.CenterStart)
+                            .fillMaxHeight()
+                            .offset(x = maxWidth * 0.5f)
+                            .width(1.dp)
+                            .background(RetroTokens.Border)
+                    )
+                    SplitPreviewPane(
+                        activeDisplayName = state.tabs.firstOrNull { it.uri == state.activeUri }?.displayName ?: "",
+                        renderedHtml = previewState.html,
+                        isLoading = previewState.isLoading,
+                        onConsole = previewVm::addConsole,
+                        modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight().fillMaxWidth(0.5f)
+                    )
+                }
+            }
+        }
 
         // MEDIUM FIX (retry storm): apply language TextMate dipindah dari update{} ke
         // LaunchedEffect dengan backoff eksponensial. Dulu tiap recomposition mencoba ulang

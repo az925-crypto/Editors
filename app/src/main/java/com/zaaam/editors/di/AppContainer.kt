@@ -51,12 +51,28 @@ class AppContainer(application: Application) {
     // beda, jadi kalau map-nya lokal isinya nggak akan ketemu. Lihat CRITICAL 3.
     val editorContents: MutableMap<String, String> = ConcurrentHashMap()
 
-    // Fase 4 live preview: EditorViewModel publish tick tiap isi file web berubah;
-    // PreviewViewModel collect → compose ulang (debounce 350ms di sana).
-    private val previewTickSeq = AtomicLong(0)
-    val previewTick = MutableStateFlow(PreviewTick(0, ""))
+// Fase 4 live preview: EditorViewModel publish tick tiap isi file web berubah;
+// PreviewViewModel collect → compose ulang (debounce 350ms di sana).
+private val previewTickSeq = AtomicLong(0)
+val previewTick = MutableStateFlow(PreviewTick(0, ""))
 
-    fun publishPreviewTick(uri: String) {
-        previewTick.value = PreviewTick(previewTickSeq.incrementAndGet(), uri)
-    }
+fun publishPreviewTick(uri: String) {
+    previewTick.value = PreviewTick(previewTickSeq.incrementAndGet(), uri)
+}
+
+// Live preview split: editor + render web terlihat bersamaan di layar Editor.
+// WHY state di container (bukan rememberSaveable lokal): harus selamat dari ganti tab
+// bottom-nav & rotasi, dan dibaca lintas-layar (chip di EditorScreen saja hari ini).
+// Persist prefs supaya pilihan user bertahan antar sesi; setter satu pintu agar
+// key prefs hanya diketahui di sini (pola SnippetRepository).
+val splitPreviewEnabled = MutableStateFlow(prefs.getBoolean(PREF_SPLIT_PREVIEW, false))
+
+fun setSplitPreview(enabled: Boolean) {
+    splitPreviewEnabled.value = enabled
+    prefs.edit().putBoolean(PREF_SPLIT_PREVIEW, enabled).apply()
+}
+
+private companion object {
+    const val PREF_SPLIT_PREVIEW = "split_preview_enabled"
+}
 }
