@@ -43,12 +43,12 @@ fun ToolsScreen(container: AppContainer) {
         )
         Box(modifier = Modifier.weight(1f)) {
             when (tab) {
-                ToolsTab.HUB -> Text("HUB")
-                ToolsTab.ANALYZE -> Text("ANALYZE")
-                ToolsTab.DUPES -> Text("DUPES")
-                ToolsTab.FIND_REPLACE -> Text("FIND_REPLACE")
-                ToolsTab.HEX -> Text("HEX")
-                ToolsTab.SNIPPETS -> Text("SNIPPETS")
+                ToolsTab.HUB -> ToolsHubScreen(container)
+                ToolsTab.ANALYZE -> AnalyzerScreen(container)
+                ToolsTab.DUPES -> DuplicatesScreen(container)
+                ToolsTab.FIND_REPLACE -> FindReplaceScreen(container)
+                ToolsTab.HEX -> HexScreen(container)
+                ToolsTab.SNIPPETS -> SnippetsScreen(container)
             }
         }
     }

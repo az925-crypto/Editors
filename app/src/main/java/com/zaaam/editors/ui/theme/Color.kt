@@ -25,6 +25,16 @@ object RetroTokens {
     val DimDeep = Color(0xFF6F6B66)
     val White = Color.White
 
+    // Token Phase 2 (mockup/phase2.html) — TAMBARAN saja; token lama jangan diubah karena
+    // dipakai layar yang sudah di-approve user.
+    val Muted = Color(0xFF8A867C)        // --muted : fmeta/kicker/placeholder
+    val DimBone = Color(0xFFB9B3A0)      // --dim : border lembut/check kosong
+    val Graphite2 = Color(0xFF3A3630)    // --graphite-2
+    val LcdDim = Color(0xFF5A6340)       // --lcd-dim : kolom offset tabel heks
+    val HairlineLcd = Color(0x2E8FA06A)  // --hairline-lcd rgba(143,160,106,.18)
+    val OliveHover = Color(0xFFC7D46B)   // --olive-hover : teks byte ter-modifikasi
+    val OlivePress = Color(0xFF9AA83E)   // --olive-press : tombol utama saat ditekan
+
     val LcdTextOnBg = Color(0xFFDDE8A0)
     val LcdTag = Color(0xFFDDE8A0)
     val LcdAttr = Color(0xFFB8C24D)
