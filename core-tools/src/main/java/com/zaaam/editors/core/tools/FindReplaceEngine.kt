@@ -8,9 +8,10 @@ import kotlinx.coroutines.withContext
 // metacharacter tidak bikin perilaku aneh). Non-overlapping, maju sepanjang panjang match.
 // ignoreCase lewat indexOf(ignoreCase=true) (regionMatches per-char), BUKAN lowercase():
 // lowercase bisa mengubah panjang string ('İ' → "i̇" 2 char) sehingga indeks match
-// lepas dari text asli → crash saat splice / teks korup.
-// Trade-off (disengaja): tanpa full Unicode case-folding ('İ' tak match 'i', 'ß' tak
-// match 'ss') — arah aman: tidak ada false positive, tidak ada korupsi indeks.
+// lepas dari text asli → crash saat splice / teks korup. regionMatches membandingkan
+// window sepanjang query DI text asli — indeks selalu valid, splice selalu aman.
+// Trade-off (disengaja): bukan full Unicode case-folding ('ß' tak match 'ss') —
+// tapi 'İ'↔'i' tetap cocok via simple lowercase mapping (terverifikasi CI).
 internal fun findMatches(text: String, query: String, ignoreCase: Boolean, maxPreviews: Int): FindOutcome {
     if (query.isEmpty()) return FindOutcome(0, emptyList())
     var total = 0

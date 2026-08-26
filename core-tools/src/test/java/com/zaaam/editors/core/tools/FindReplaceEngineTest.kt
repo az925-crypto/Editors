@@ -76,12 +76,16 @@ class FindReplacePureTest {
     @Test
     fun `regresi char lowercase memanjang tidak bikin crash`() {
         // 'İ' U+0130 kalau dilowercase() memanjang jadi 2 char ("i" + combining dot).
-        // Implementasi lama pakai lowercase() sehingga indeks match lepas dari text asli.
+        // Implementasi lama pakai lowercase() sehingga indeks match lepas dari text asli
+        // → cursor bisa lewat text.length (IndexOutOfBounds) / splice korup.
+        // regionMatches cocokkan 'İ'↔'i' via simple lowercase mapping, TAPI indeks tetap
+        // di koordinat text asli — jadi hasilnya valid dan splice-nya aman.
         val outcome = findMatches("İx İx", "ix", ignoreCase = true, maxPreviews = 10)
-        assertEquals(0, outcome.totalMatches) // İ tidak fold ke 'i': aman, bukan false positive
+        assertEquals(2, outcome.totalMatches)
+        assertEquals(listOf(0, 3), outcome.previews.map { it.startInLine })
         val result = replaceLiteral("İx İx", "ix", "R", ignoreCase = true)
-        assertEquals("İx İx", result.newText) // teks utuh, tanpa exception
-        assertEquals(0, result.count)
+        assertEquals("R R", result.newText)
+        assertEquals(2, result.count)
     }
 
     @Test
