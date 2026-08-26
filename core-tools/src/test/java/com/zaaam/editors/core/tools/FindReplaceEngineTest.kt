@@ -74,7 +74,7 @@ class FindReplacePureTest {
     }
 
     @Test
-    fun `regresi: char yang lowercase-nya memanjang tidak bikin crash`() {
+    fun `regresi char lowercase memanjang tidak bikin crash`() {
         // 'İ' U+0130 kalau dilowercase() memanjang jadi 2 char ("i" + combining dot).
         // Implementasi lama pakai lowercase() sehingga indeks match lepas dari text asli.
         val outcome = findMatches("İx İx", "ix", ignoreCase = true, maxPreviews = 10)
