@@ -1,7 +1,0 @@
-selalu build dan jalamkan tes yang berat semisal gradle atau semacamnya di jalankan di github action
-packagename asplikasi nya adalah com + zaaam + nama direktori ini 
-ini adalah repositori github untuk projek ini https://github.com/az925-crypto/Editors.git
-selalu build release dan letakan di relase 
-sebeluk masuk ke ui bikin mockup jya dulu jalankan (pakai mockup html full aplikasi nya) di localhost kabari di telegram untuk persetujuan
-
- 
