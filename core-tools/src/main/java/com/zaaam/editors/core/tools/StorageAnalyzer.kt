@@ -1,7 +1,8 @@
 package com.zaaam.editors.core.tools
 
 // Agregat murni dari hasil walk — tanpa IO, tested langsung.
-internal fun aggregateAnalysis(
+// PUBLIC sejak UI Phase 2: dipanggil AnalyzerScreen di :app (satu-satunya deklarasi agregasi).
+fun aggregateAnalysis(
     files: List<ToolNode>,
     dirs: List<ToolNode>,
     skippedDirs: Int,

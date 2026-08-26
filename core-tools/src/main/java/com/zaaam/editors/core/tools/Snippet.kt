@@ -25,7 +25,8 @@ const val SNIPPET_VERSION = 1
 
 // Codec JSON hand-rolled (skema cuma 5 field — plugin serialization tidak layak risikonya
 // di repo sensitif-AGP-9 ini). Adapter point Codexa: ganti/implement SnippetExchange nanti.
-internal object SnippetJsonCodec {
+// PUBLIC sejak UI Phase 2: SnippetsScreen (:app) encode/decode via repo prefs "snippets_v1".
+object SnippetJsonCodec {
 
     fun encode(snippets: List<Snippet>, exportedAtMs: Long = System.currentTimeMillis()): String {
         val sb = StringBuilder()
