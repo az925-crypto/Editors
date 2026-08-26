@@ -5,6 +5,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,6 +25,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,6 +35,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.zaaam.editors.core.fs.FsResult
@@ -142,7 +145,7 @@ fun FindReplaceScreen(container: AppContainer) {
     val matched = reports.filter { (it.outcome?.totalMatches ?: 0) > 0 }
     val pending = matched.filter { it.node.uri in selectedUris && it.node.uri !in outcomes.keys }
     val pendingLocations = pending.sumOf { it.outcome!!.totalMatches }
-    val totals = summarizeReplace(outcomes.values)
+    val totals = summarizeReplace(outcomes.values.toList())
 
     Column(modifier = Modifier.fillMaxSize()) {
         Column(Modifier.padding(start = 14.dp, end = 14.dp)) {
@@ -187,7 +190,7 @@ fun FindReplaceScreen(container: AppContainer) {
             item {
                 val label = buildString {
                     append("HASIL PINDAI")
-                    if (matched.isNotEmpty()) append(" \u00b7 ${matched.size} FILE \u00b7 $totalLocations LOKASI")
+                    if (matched.isNotEmpty()) append(" \u00b7 ${matched.size} FILE \u00b7 $pendingLocations LOKASI")
                     if (totals.changedSkipped > 0 || totals.failed > 0) {
                         append(" \u00b7 ${totals.changedSkipped} BERUBAH \u00b7 ${totals.failed} GAGAL")
                     }
@@ -195,11 +198,12 @@ fun FindReplaceScreen(container: AppContainer) {
                 ToolsSectionLabel(label)
             }
             itemsIndexed(matched, key = { _, r -> r.node.uri }) { _, report ->
+                val oc = report.outcome!! // property lintas module — smart cast tak berlaku
                 ReplaceReportRow(
                     name = report.node.name,
                     dir = report.node.relPath.substringBeforeLast("/", missingDelimiterValue = "(akar)"),
-                    matchCount = report.outcome!!.totalMatches,
-                    previews = report.outcome.previews,
+                    matchCount = oc.totalMatches,
+                    previews = oc.previews,
                     after = outcomes[report.node.uri],
                     checked = report.node.uri in selectedUris,
                     onCheck = { checked ->

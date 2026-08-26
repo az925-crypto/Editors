@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
@@ -51,7 +52,7 @@ fun ToolsHubScreen(container: AppContainer) {
             )
         }
         item { ToolsSectionLabel("MENU \u00b7 PILIH ALAT", Modifier.padding(top = 4.dp)) }
-        items(menu, key = { it.second.name }) { (stencil, title, tab) ->
+        items(menu, key = { it.third.name }) { (stencil, title, tab) ->
             ToolsCartridgeRow(
                 stencil = stencil,
                 title = title,
