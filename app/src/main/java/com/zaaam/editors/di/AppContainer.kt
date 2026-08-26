@@ -8,6 +8,9 @@ import com.zaaam.editors.core.fs.HiddenFiles
 import com.zaaam.editors.core.fs.SafFileSystemImpl
 import com.zaaam.editors.core.fs.TreeAccess
 import com.zaaam.editors.session.AppScreen
+import com.zaaam.editors.session.SnippetRepository
+import com.zaaam.editors.session.ToolsTab
+import com.zaaam.editors.session.TreeScanManager
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -32,6 +35,16 @@ class AppContainer(application: Application) {
 
     val editorSession = EditorSession()
     val screenState = MutableStateFlow(AppScreen.FILES)
+
+    // Phase 2 (ALAT): sub-tab aktif + target hex editor. hexTargetUri di-set rider
+    // FilesViewModel.openFile saat file BINARY dibuka — entry point hex editor.
+    val toolsTab = MutableStateFlow(ToolsTab.HUB)
+    val hexTargetUri = MutableStateFlow<String?>(null)
+
+    // Shared scan (Analyzer+Dupes+FindReplace pakai satu cache walk) + repo snippet prefs.
+    // Keduanya singleton container karena state-nya lintas-layar.
+    val treeScanManager = TreeScanManager(fileSystem, treeAccess, prefs, ioDispatcher)
+    val snippetRepository = SnippetRepository(prefs)
 
     // Shared antara FilesViewModel (penulis) dan EditorViewModel (pembaca) supaya isi file
     // yang baru dibuka langsung kebaca EditorViewModel ini — dua ViewModel ini instance-nya

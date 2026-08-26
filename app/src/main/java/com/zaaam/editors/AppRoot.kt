@@ -24,6 +24,7 @@ import com.zaaam.editors.session.AppScreen
 import com.zaaam.editors.ui.editor.EditorScreen
 import com.zaaam.editors.ui.files.FilesScreen
 import com.zaaam.editors.ui.preview.PreviewScreen
+import com.zaaam.editors.ui.tools.ToolsScreen
 import com.zaaam.editors.ui.theme.RetroTokens
 
 @Composable
@@ -35,6 +36,7 @@ fun AppRoot(container: AppContainer) {
                 AppScreen.FILES -> FilesScreen(container)
                 AppScreen.EDITOR -> EditorScreen(container)
                 AppScreen.PREVIEW -> PreviewScreen(container)
+                AppScreen.TOOLS -> ToolsScreen(container)
             }
         }
         BottomNav(container)
@@ -54,6 +56,7 @@ private fun BottomNav(container: AppContainer) {
         NavItem("Files", screen == AppScreen.FILES, Modifier.weight(1f)) { container.screenState.value = AppScreen.FILES }
         NavItem("Editor", screen == AppScreen.EDITOR, Modifier.weight(1f)) { container.screenState.value = AppScreen.EDITOR }
         NavItem("Preview", screen == AppScreen.PREVIEW, Modifier.weight(1f)) { container.screenState.value = AppScreen.PREVIEW }
+        NavItem("Alat", screen == AppScreen.TOOLS, Modifier.weight(1f)) { container.screenState.value = AppScreen.TOOLS }
     }
 }
 
