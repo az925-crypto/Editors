@@ -12,7 +12,7 @@ Mobile code editor + file manager + live preview + toolkit untuk Android. Dibuat
 2. Buka app → dialog SAF muncul → **Pilih folder** project-mu (grant read+write).
 3. Tab **Files**: browse file, tap `index.html` → terbuka di Editor. Tap file biner (jpg/zip/apk) → langsung masuk **Editor Heks**.
 4. Tab **Editor**: ngoding dengan highlighting; autosave jalan otomatis (debounce ~900ms, LED status di bawah tab strip).
-5. Tap chip **Preview ▶** (muncul untuk html/css/js) atau nav **Preview**: render live dokumenmu; file `style.css`/`main.js` yang ikut terbuka sebagai tab ikut tersuntik ke placeholder `<link rel="stylesheet" href="style.css">` / `<script src="main.js"></script>`.
+5. Tap chip **Split ◫** untuk pratinjau live berdampingan saat mengetik, atau chip **Preview ▶** / nav **Preview** (muncul untuk html/css/js): render live dokumenmu; file `style.css`/`main.js` yang ikut terbuka sebagai tab ikut tersuntik ke placeholder `<link rel="stylesheet" href="style.css">` / `<script src="main.js"></script>`.
 6. Console drawer di bawah preview menampilkan `console.log/warn/error` + error runtime halaman (`preview siap` = instrumentasi aktif).
 7. Tab **Alat**: lima perkakas offline — Analisa Penyimpanan, Cari Duplikat, Ganti Massal, Editor Heks, Snippet. Semua berbagi satu pindaian tree (pilih folder sekali, dipakai bersama).
 

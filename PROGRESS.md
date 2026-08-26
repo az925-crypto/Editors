@@ -1,6 +1,6 @@
 # Progress & Handoff — zaaam/editors
 
-**Tanggal:** 2026-08-26 (update: **v0.2.1 — fix CRITICAL FC cold start di device** (languages.json salah kunci vs sora reader); Phase 2 tuntas + rilis ulang)
+**Tanggal:** 2026-08-26 (update: **fitur LIVE PREVIEW SPLIT tuntas + reviewer blocking bersih**; sebelumnya v0.2.1 fix CRITICAL FC cold start)
 **HEAD:** lihat `git log -1` — WAJIB cek CI (`gh run list --limit 1`) sebelum lanjut apapun
 **Repo:** https://github.com/az925-crypto/Editors.git
 **Package:** `com.zaaam.editors` — minSdk 26 / targetSdk 36 / compileSdk 36 / Kotlin 2.4.10 / AGP 9.3.0 / Gradle 9.5.0 / JDK 21
@@ -28,6 +28,11 @@
 11. **Peta lengkap seluruh file + penjelasan per file: `STRUCTURE.md` (root)** — baca SEBELUM sentuh kode. Berisi: alur data inti, kontrak `editorContents`, isi/gotcha tiap file, lokasi tiap masalah terbuka, dan status file (aktif/reserved/dihapus).
 12. `ah.txt` sudah DIHAPUS (snapshot basi pra-Sora). Sejak Fase 4, `PreviewWebViewFactory.kt` + `ConsoleBridge` BENAR-BENAR TERPAKAI (bridge terpasang + rate-limited) — jangan dihapus. Yang benar-benar sudah dibuang: 5 stub UI komponen + stub AutoSaveController (commit `7d23b56`).
 13. **CRITICAL (v0.2.1 — FC cold start di device):** sora 0.23.6 `LanguageDefinitionReader` membaca kunci **`"grammar"`** di tiap entri `languages.json` (BUKAN `"path"`) + path asset TANPA prefix `./`. Salah format = NPE di preload startup → seluruh proses mati sebelum UI. Tidak pernah ketahuan karena CI tidak menjalankan app dan APK release baru pertama kali dipasang device saat v0.2.0. Pengaman: `TextMateAssetsContractTest` (CI) + initTextMate try-catch (degradasi tanpa highlighting, tidak bunuh proses). **PELAJARI: unit test JVM hijau ≠ app jalan di device; smoke-test APK RELEASE di device adalah bagian dari definisi selesai rilis.**
+14. **INVARIANT live preview split (jangan dirusak):**
+    - `PreviewViewModel` DI-SHARE satu instance antara layar Preview & pane Editor via `viewModel { PreviewViewModel(container) }` — sah karena app TANPA NavHost (ViewModelStoreOwner = Activity). Kalau nanti migrasi ke Navigation-Compose, factory/scope ini berubah makna → double-instance → double-compose.
+    - Collector tick di VM DIGERBANGI konsumen (`screenState==PREVIEW || (EDITOR && splitPreviewEnabled)`). **Menambah konsumen preview ketiga = WAJIB update gate itu + ritual seed `LaunchedEffect(activeUri, flag) { vm.showActiveFile(...) }` di konsumen baru**, kalau tidak preview diam-diam basi tanpa error.
+    - `showActiveFile()` me-RESET state bila dokumen berganti (anti render basi di bawah header baru); same-doc re-seed sengaja tidak reset (anti flicker).
+    - Node AndroidView sora HARUS tetap SATU call-site dalam BoxWithConstraints (posisi via modifier alignment/fraction, BUKAN pindah parent Column↔Row) — kalau reparenting, editor dibuat ulang saat rotasi (cursor/undo hilang).
 
 ---
 
@@ -80,9 +85,18 @@
 - Security UI: BLOCKING no sejak r1 (error generik, tanpa Regex user-input, prefs aman, permission path konsisten).
 - maintainability non-blocking: catatan backlog di bawah.
 
-## 🚧 STATE SEKARANG (pasca-Phase 2)
+## ✅ LIVE PREVIEW SPLIT (2026-08-26, semua CI GREEN + reviewer blocking bersih)
 
-Semua fitur besar Fase 1-5 + Phase 2 SELESAI & reviewer blocking bersih. Yang tersisa hanya rilis v0.2.0 (bump versi → tag → verifikasi APK) bila belum dilakukan.
+Fitur: editor dan render web TERLIHAT BERSAMAAN di layar Editor — chip **"Split ◫"** (hanya file web) toggle pane; hasil update otomatis saat mengetik (debounce 200ms editor + 350ms preview). Keputusan desain (planner+design):
+- **Reuse `PreviewViewModel` yang sama** (activity-scoped, tanpa NavHost) — TIDAK membuat composer/collector kedua; pipeline tick→debounce→compose tetap satu, double-compose mustahil by construction. Ekstraksi "PreviewDocumentAssembler" DIBATALKAN (YAGNI).
+- `PreviewWebViewPanel` diekstraksi dari PreviewScreen (dipakai dua call site) + `onRelease { stopLoading(); destroy() }` — sekalian fix leak WebView pre-existing.
+- Flag `container.splitPreviewEnabled` persist prefs key `split_preview_enabled` (setter satu pintu), default OFF.
+- Layout: SATU `BoxWithConstraints` — portrait editor atas 50% / pane bawah; landscape side-by-side; divider hairline 1dp Border digambar SETELAH pane (z-order). Pane blank = box teks Indonesia (BUKAN demo HTML); tanpa console drawer (fitur lengkap tetap di tab Preview).
+- Fix pasca-review: reset render basi saat ganti dokumen (`showActiveFile`), gate konsumen untuk collector tick (hemat CPU saat split OFF & bukan layar Preview), seed keyed `(activeUri, splitEnabled)`.
+
+## 🚧 STATE SEKARANG (pasca-Live-Preview-Split)
+
+Semua fitur besar Fase 1-5 + Phase 2 + Live Preview Split SELESAI & reviewer blocking bersih. Rilis terakhir v0.2.1. Langkah berikutnya bila mau rilis fitur ini: bump versionCode=6/versionName=0.3.0 → tag → verifikasi APK release di device (smoke-test wajib per gotcha #13).
 
 ## ⚠️ BACKLOG AKTIF (urutan prioritas, 2026-08-26 pasca-Phase-2-tuntas)
 
@@ -98,6 +112,10 @@ Sisa dari review UI/engine (semua non-blocking, tidak menghalangi rilis):
 8. **[Backlog tetap]** fonts bundling (`res/font` kosong); SHA-1→SHA-256 dupes (LOW: v0.2 tanpa aksi hapus); preview multi-baris label "…"; MAX_WALK_NODES cap walk; writeBytes/writeText truncate non-atomik (dokumentasi limitasi SAF).
 9. **[Codexa]** import/export snippet menunggu spesifikasi eksternal — adapter `SnippetExchange` siap di core-tools.
 10. **[Known limitation — SENGAJA]:** ketikan ~900ms sebelum closeTab hilang (anti-resurrect); job autosave in-flight tak dicancel; compose(html,null,null) identity; placeholder composer exact-string casing-sensitive; hex highlight "pernah diedit" tetap menyala setelah undo (nilai asli dipulihkan tapi map original tak dihapus kecuali match persis).
+11. **[Split preview] delta-update WebView** pengganti full-reload per burst (~550ms idle) — hilangkan scroll-reset tiap update; plus preserve scroll via evaluateJavascript. Lokasi: PreviewWebViewPanel.kt.
+12. **[Split preview] IME memakan setengah area** (adjustResize) — auto-collapse pane saat keyboard visible (`WindowInsets.isImeVisible`). JANGAN ganti softInputMode global.
+13. **[Split preview] Draggable divider** pengganti rasio fixed 50/50; rotasi mid-split me-remount pane (WebView baru) — bisa dioptimalkan kalau keluhannya muncul.
+14. **[Maintainability split] Kopling gate lintas-file** (`screenState`+flag dibaca VM): konsumen ketiga wajib update gate + seed ritual (gotcha #14); literal 0.5f ×6 titik → ekstrak konstanta; duplikasi styling canvas putih pane vs layar Preview → pertimbangkan token shared; displayName lookup ×2 → hoist satu kali.
 
 ---
 
@@ -106,6 +124,8 @@ Sisa dari review UI/engine (semua non-blocking, tidak menghalangi rilis):
 Dipindah ke **STRUCTURE.md** (root) — peta lengkap per file beserta penjelasan, gotcha, dan lokasi masalah terbuka. Bagian ini tidak lagi dipelihara supaya tidak ada dua sumber kebenaran.
 
 ## RIWAYAT COMMIT SESI INI (baru)
+Batch live preview split 2026-08-26 (CI GREEN di HEAD): `4d623ae` ekstraksi PreviewWebViewPanel+onRelease destroy → `2c07ed6` feat split view (chip persist, pane reuse VM shared, BoxWithConstraints) → `81cd73f` fix review (reset render basi ganti dokumen, gate konsumen tick, divider z-order).
+Batch v0.2.1: `82d422f` fix CRITICAL FC cold start — languages.json kunci "grammar" + initTextMate try-catch + TextMateAssetsContractTest + docs gotcha/qa.
 Batch Phase 2 tuntas 2026-08-26 (CI GREEN di HEAD): engine `0b53669` mockup approved → `0fa46b0` core-fs api bytes+cancellation → `06aec6f` core-tools scaffold+scanner → `4fe4986` engines+test → `70087b0`,`9605fa9`,`1bbc0f1`,`017b3f7`,`b0c104f` fix iterasi CI. Reviewer engine: `70b4372` trio r1 fixes (desink ignoreCase, depth JSON, cancel dupes/scanner) + `f07088e`,`ba9432d` fix nama test/ekspektasi İ (regionMatches cocokkan İ↔i). UI: `8c09605` c7 nav+ToolsTab → `5aad570` c8 widening visibilitas → `aa0d049` c9 TreeScanManager+SnippetRepo+readStream+test → `f933b47` c10 komponen+hub+analisa → `3dcf2f6` c11 dupes+findreplace → `f069dac` c12 hex+rider → `73f794f` c13 snippets → `0a09dfe` fix import compile → `c801d5e` reviewer UI r1 fixes (stale dupes outcome, preview window anti-OOM, guard query kosong, dedup snippet id, IO off-main, skip-overwrite dirty, LED owner, 0-byte, gate analyzer).
 Batch sebelumnya — Fase 4 + rilis v0.1.2: `4c1c0f3` readBounded+text.plain → `1409e6c` composer+bridge hardened → `6830d11` autosave coordinator+isWebFile+openTab+tick → `a3b2f64` fase 4 preview live → `5c81b2f`,`630ee8b`,`9511afe` reviewer fixes → `40d88cb`,`17c17e0` api rapi+bump v0.1.2 → `cad2d29` proguard dontwarn R8.
 Riwayat lama: `ec37762` editor race+autosave real+ready-signal → `3e20f64` core-fs permission/stream jujur → `b3be056` files BackHandler+guards → `873d0b8` preview hardened+escape → `5d1b7c2` test infra → `c4e3b97` release.yml sanitasi → `458d081` anti-korupsi biner → `6822091` fixture ELF → `6e10067` LED jujur divergence guard → lebih lama lihat git log.

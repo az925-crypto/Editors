@@ -22,10 +22,15 @@ Di-refresh 2026-08-26 pasca-Phase 2 (6 layar ALAT: analisa, duplikat, ganti mass
 - [ ] Autosave benar-benar menulis ke disk: edit di app → cek file via file manager lain
 - [ ] Pindah tab cepat saat ngetik → isi kedua tab tidak tertukar (race guard)
 - [ ] Chip **Preview ▶** hanya muncul untuk html/css/js; tap langsung lompat ke layar Preview
+- [ ] Chip **Split ◫** hanya muncul untuk html/css/js; toggle → editor atas + pratinjau bawah (landscape: samping-samping); ketik → render ikut terbaru (<~1 detik)
+- [ ] Split ON → ganti dokumen web lain → pane menampilkan dokumen BARU (tidak ada render basi dokumen lama di bawah header baru)
+- [ ] Split ON → tutup tab web aktif / pindah ke file non-web → editor full kembali, tanpa crash; buka file web lagi → pane muncul dengan isi benar
+- [ ] Rotasi saat split ON → posisi cursor/undo editor tidak hilang; layout flip portrait↔landscape benar
+- [ ] Matikan Split → buka app ulang dari launcher → chip masih ON (persist prefs)
 
 ## 4. Preview screen
 - [ ] Masuk Preview dari chip/nav → konten aktif langsung tampil (seed instan), urlbar menampilkan uri `content://…` nyata
-- [ ] Edit HTML di Editor → balik ke Preview → render terbaru (push tick, debounce 350ms)
+- [ ] Edit HTML di Editor → balik ke Preview → render terbaru (push tick, debounce 350ms); konsol histori tetap ada karena VM di-share dengan pane split
 - [ ] Trio klasik: buka index.html + style.css + main.js sebagai tab → preview menyuntik keduanya ke placeholder `<link rel="stylesheet" href="style.css">` / `<script src="main.js"></script>`
 - [ ] Buka file .css langsung → scaffold style; file .js langsung → dieksekusi TEPAT SATU kali (cek log tidak dobel)
 - [ ] Console drawer: collapsed bar 40dp ↔ expanded 40% (maks 320dp) animasi halus; badge LOG/WARN/ERR + timestamp; Clear mengosongkan
