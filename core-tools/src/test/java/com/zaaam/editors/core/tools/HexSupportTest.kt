@@ -47,4 +47,14 @@ class HexSupportTest {
         assertEquals("48", row[0].hex)
         assertEquals('H', row[0].ascii)
     }
+
+    @Test
+    fun `formatRow offset negatif ditolak jadi kosong`() {
+        assertTrue(formatRow(byteArrayOf(1, 2, 3), -1).isEmpty())
+    }
+
+    @Test
+    fun `formatRow offset pas ukuran buffer ditolak jadi kosong`() {
+        assertTrue(formatRow(byteArrayOf(1, 2, 3), 3).isEmpty())
+    }
 }

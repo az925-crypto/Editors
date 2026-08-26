@@ -37,7 +37,8 @@ data class DuplicateGroup(val sizeBytes: Long, val nodes: List<ToolNode>)
 data class ScanStats(
     val skippedDirs: Int = 0,
     val changedDuringScan: Int = 0,
-    val oversizedSkipped: Int = 0
+    val oversizedSkipped: Int = 0,
+    val rootFailed: Boolean = false // root gagal listChildren — bedakan dari folder kosong sah.
 )
 
 data class TreeScanResult(

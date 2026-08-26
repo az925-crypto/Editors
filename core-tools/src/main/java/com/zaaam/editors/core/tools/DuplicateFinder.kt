@@ -50,15 +50,19 @@ class DuplicateFinder(
 
         // Fase 2: head 64KB hash.
         val afterHead = mutableListOf<Pair<ToolNode, String>>()
-        var processed = 0
+        // Counter kumulatif lintas fase: +1 tiap node SELESAI sukses di-hash (head atau full).
+        // Full-phase me-re-hash subset fase head → tanpa clamp bisa melebihi total,
+        // makanya setiap emit di-coerceAtMost: monotonik naik & tak pernah > candidates.size.
+        var hashed = 0
         for (group in bySize) {
             ensureActive()
             for (node in group) {
+                ensureActive() // cancel responsif walau satu grup ribuan file
                 val headHash = hashOf(node.uri, HEAD_WINDOW_BYTES) ?: continue
                 afterHead.add(node to headHash)
+                hashed++
             }
-            processed += group.size
-            onProgress(ToolProgress(ToolPhase.HASH, processed, candidates.size))
+            onProgress(ToolProgress(ToolPhase.HASH, hashed.coerceAtMost(candidates.size), candidates.size))
         }
         val headGroups = afterHead.groupBy({ it.second }, { it.first }).values.filter { it.size > 1 }
 
@@ -69,6 +73,7 @@ class DuplicateFinder(
             ensureActive()
             val verified = mutableListOf<Pair<ToolNode, String>>()
             for (node in group) {
+                ensureActive()
                 val nowSize = statSize(node.uri)
                 if (nowSize == null || nowSize != node.size) {
                     changedDuringScan++
@@ -76,6 +81,9 @@ class DuplicateFinder(
                 }
                 val fullHash = hashOf(node.uri, -1) ?: continue
                 verified.add(node to fullHash)
+                // Fase paling lama (full SHA-1 file besar): emit per node biar UI gak freeze.
+                hashed++
+                onProgress(ToolProgress(ToolPhase.HASH, hashed.coerceAtMost(candidates.size), candidates.size))
             }
             verified.groupBy({ it.second }, { it.first })
                 .values
@@ -93,6 +101,8 @@ class DuplicateFinder(
     private suspend fun hashOf(uri: String, limitBytes: Long): String? = try {
         val stream = openStream(uri) ?: return null
         stream.use { hex(sha1Streaming(it, limitBytes)) }
+    } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e // cancel bukan error IO — jangan ditelan jadi null palsu
     } catch (_: Exception) {
         null
     }

@@ -68,6 +68,9 @@ class SafFileSystemImpl(private val resolver: ContentResolver) : SafFileSystem {
             // MEDIUM (cursor leak): pakai use{} supaya cursor selalu ke-close, termasuk kalau
             // ada exception di tengah while-loop — sebelumnya cursor.close() manual di akhir
             // bisa kelewat kalau ada throw duluan.
+            // PERF FIX: FileKindResolver stateless — hoist SATU instance, jangan alokasi baru
+            // per baris cursor (10k entry = 10k alokasi percuma).
+            val kindResolver = FileKindResolver()
             resolver.query(childrenUri, projection, null, null, null)?.use { cursor ->
                 while (cursor.moveToNext()) {
                     val id = cursor.getString(0) ?: ""
@@ -78,7 +81,7 @@ class SafFileSystemImpl(private val resolver: ContentResolver) : SafFileSystem {
                     val childUri = DocumentsContract.buildDocumentUriUsingTree(parentUri, id)
                     val isDir = mime == DocumentsContract.Document.MIME_TYPE_DIR
                     val isHidden = name.startsWith(".")
-                    val kind = FileKindResolver().resolve(name)
+                    val kind = kindResolver.resolve(name)
                     list.add(FsEntry(name, childUri, isDir, size, modified, isHidden, kind))
                 }
             }

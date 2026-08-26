@@ -72,6 +72,32 @@ class FindReplacePureTest {
         assertEquals("tetap", result.newText)
         assertEquals(0, result.count)
     }
+
+    @Test
+    fun `regresi: char yang lowercase-nya memanjang tidak bikin crash`() {
+        // 'İ' U+0130 kalau dilowercase() memanjang jadi 2 char ("i" + combining dot).
+        // Implementasi lama pakai lowercase() sehingga indeks match lepas dari text asli.
+        val outcome = findMatches("İx İx", "ix", ignoreCase = true, maxPreviews = 10)
+        assertEquals(0, outcome.totalMatches) // İ tidak fold ke 'i': aman, bukan false positive
+        val result = replaceLiteral("İx İx", "ix", "R", ignoreCase = true)
+        assertEquals("İx İx", result.newText) // teks utuh, tanpa exception
+        assertEquals(0, result.count)
+    }
+
+    @Test
+    fun `indeks match presisi walau lowercase memanjang panjangnya`() {
+        // Bukti indeks ASLI yang dipakai: match kedua mulai di 'İ' kedua (index 3),
+        // bukan di koordinat versi lowercase yang sudah bergeser +1 per 'İ'.
+        val text = "İA İA"
+        val outcome = findMatches(text, "İa", ignoreCase = true, maxPreviews = 10)
+        assertEquals(2, outcome.totalMatches)
+        assertEquals(listOf(0, 3), outcome.previews.map { it.startInLine })
+        assertEquals(listOf(2, 5), outcome.previews.map { it.endInLine })
+
+        val result = replaceLiteral(text, "İa", "Z", ignoreCase = true)
+        assertEquals("Z Z", result.newText)
+        assertEquals(2, result.count)
+    }
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)

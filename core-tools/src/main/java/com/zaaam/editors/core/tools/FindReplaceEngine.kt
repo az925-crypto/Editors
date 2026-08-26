@@ -6,17 +6,20 @@ import kotlinx.coroutines.withContext
 
 // Pencarian LITERAL murni (loop indexOf — sengaja BUKAN Regex, supaya query berisi
 // metacharacter tidak bikin perilaku aneh). Non-overlapping, maju sepanjang panjang match.
+// ignoreCase lewat indexOf(ignoreCase=true) (regionMatches per-char), BUKAN lowercase():
+// lowercase bisa mengubah panjang string ('İ' → "i̇" 2 char) sehingga indeks match
+// lepas dari text asli → crash saat splice / teks korup.
+// Trade-off (disengaja): tanpa full Unicode case-folding ('İ' tak match 'i', 'ß' tak
+// match 'ss') — arah aman: tidak ada false positive, tidak ada korupsi indeks.
 internal fun findMatches(text: String, query: String, ignoreCase: Boolean, maxPreviews: Int): FindOutcome {
     if (query.isEmpty()) return FindOutcome(0, emptyList())
-    val hay = if (ignoreCase) text.lowercase() else text
-    val needle = if (ignoreCase) query.lowercase() else query
     var total = 0
     val previews = mutableListOf<MatchPreview>()
-    var idx = hay.indexOf(needle)
+    var idx = text.indexOf(query, 0, ignoreCase)
     while (idx >= 0) {
         total++
-        if (previews.size < maxPreviews) previews.add(previewAt(text, idx, needle.length))
-        idx = hay.indexOf(needle, idx + needle.length)
+        if (previews.size < maxPreviews) previews.add(previewAt(text, idx, query.length))
+        idx = text.indexOf(query, idx + query.length, ignoreCase)
     }
     return FindOutcome(total, previews)
 }
@@ -42,17 +45,17 @@ private fun previewAt(text: String, matchStart: Int, matchLen: Int): MatchPrevie
 
 internal fun replaceLiteral(text: String, from: String, to: String, ignoreCase: Boolean): ReplaceOutcome {
     if (from.isEmpty()) return ReplaceOutcome(text, 0)
-    val hay = if (ignoreCase) text.lowercase() else text
-    val needle = if (ignoreCase) from.lowercase() else from
+    // indexOf ignoreCase menjaga indeks tetap di koordinat text asli (lihat catatan atas),
+    // jadi cursor selalu <= text.length dan splice StringBuilder aman.
     val out = StringBuilder(text.length)
     var count = 0
     var cursor = 0
-    var idx = hay.indexOf(needle)
+    var idx = text.indexOf(from, 0, ignoreCase)
     while (idx >= 0) {
         out.append(text, cursor, idx).append(to)
-        cursor = idx + needle.length
+        cursor = idx + from.length
         count++
-        idx = hay.indexOf(needle, cursor)
+        idx = text.indexOf(from, cursor, ignoreCase)
     }
     out.append(text, cursor, text.length)
     return ReplaceOutcome(out.toString(), count)

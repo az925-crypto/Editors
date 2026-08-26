@@ -93,13 +93,17 @@ internal object SnippetJsonCodec {
     }
 }
 
+// Batas nesting JSON utk input untrusted (import user): tanpa ini rekursi parser bisa
+// StackOverflowError — Error yang lolos dari catch(Exception) di parseOrNull → crash proses.
+internal const val JSON_MAX_DEPTH = 128
+
 // Parser JSON minimal STRICT untuk kebutuhan codec: object/array/string/number(long)/bool/null.
 // Cukup ketat: string tanpa escape valid ditolak, trailing garbage ditolak.
 internal object JsonMini {
 
     fun parseOrNull(json: String): Any? = try {
         val p = Parser(json)
-        val v = p.parseValue()
+        val v = p.parseValue(depth = 0)
         p.skipWs()
         if (!p.atEnd() || p.failed) null else v
     } catch (_: Exception) {
@@ -115,18 +119,19 @@ internal object JsonMini {
 
         fun skipWs() { while (pos < s.length && s[pos].isWhitespace()) pos++ }
 
-        fun parseValue(): Any? {
+        fun parseValue(depth: Int): Any? {
+            if (depth > JSON_MAX_DEPTH) return fail() // stop rekursi sebelum stack habis
             skipWs()
             if (atEnd()) return fail()
             return when (s[pos]) {
-                '{' -> parseObject()
-                '[' -> parseArray()
+                '{' -> parseObject(depth)
+                '[' -> parseArray(depth)
                 '"' -> parseString()
                 else -> parseLiteral()
             }
         }
 
-        fun parseObject(): Any? {
+        fun parseObject(depth: Int): Any? {
             pos++ // {
             val map = LinkedHashMap<String, Any?>()
             skipWs()
@@ -138,7 +143,7 @@ internal object JsonMini {
                 skipWs()
                 if (atEnd() || s[pos] != ':') return fail()
                 pos++
-                val value = parseValue() ?: if (failed) return null else null
+                val value = parseValue(depth + 1) ?: if (failed) return null else null
                 if (failed) return null
                 map[key] = value
                 skipWs()
@@ -151,13 +156,13 @@ internal object JsonMini {
             }
         }
 
-        fun parseArray(): Any? {
+        fun parseArray(depth: Int): Any? {
             pos++ // [
             val list = mutableListOf<Any?>()
             skipWs()
             if (!atEnd() && s[pos] == ']') { pos++; return list }
             while (true) {
-                val item = parseValue() ?: if (failed) return null else null
+                val item = parseValue(depth + 1) ?: if (failed) return null else null
                 if (failed) return null
                 list.add(item)
                 skipWs()

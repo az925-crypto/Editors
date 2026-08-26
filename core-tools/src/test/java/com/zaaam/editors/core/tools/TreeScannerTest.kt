@@ -85,4 +85,59 @@ class TreeScannerTest {
         scannerOf(tree).walk("root", includeHidden = true) { calls++ }
         assertTrue(calls >= 2)
     }
+
+    @Test
+    fun `root gagal ditandai rootFailed bukan dianggap folder kosong`() = runTest {
+        // Map sengaja tanpa entri "root" → listChildren(root) Error.
+        val tree = mapOf("u:lain" to emptyList<ToolNode>())
+        val result = scannerOf(tree).walk("root", includeHidden = true)
+
+        assertTrue(result.stats.rootFailed)
+        assertEquals(0, result.stats.skippedDirs) // root gagal ≠ skipped biasa
+        assertTrue(result.files.isEmpty() && result.dirs.isEmpty())
+    }
+
+    @Test
+    fun `siklus folder terminate dan tidak dobel hitung`() = runTest {
+        // Provider jahat/buggy: folder menunjuk dirinya sendiri → walk harus berhenti sendiri;
+        // selesainya test ini adalah bukti anti infinite loop.
+        val tree = mapOf(
+            "root" to listOf(d("loop"), f("a.txt")),
+            "u:loop" to listOf(d("loop"))
+        )
+        val result = scannerOf(tree).walk("root", includeHidden = true)
+
+        assertEquals(listOf("loop"), result.dirs.map { it.relPath }) // sekali saja
+        assertEquals(listOf("a.txt"), result.files.map { it.relPath })
+
+        // Siklus antar-folder: a → b → a juga harus putus lewat visited-set.
+        val mutual = mapOf(
+            "root" to listOf(d("a"), f("x.txt")),
+            "u:a" to listOf(d("b")),
+            "u:b" to listOf(d("a"))
+        )
+        val result2 = scannerOf(mutual).walk("root", includeHidden = true)
+
+        assertEquals(listOf("a", "a/b"), result2.dirs.map { it.relPath })
+        assertEquals(listOf("x.txt"), result2.files.map { it.relPath })
+    }
+
+    @Test
+    fun `progress membawa hitungan file dan estimasi monotonik`() = runTest {
+        // 1 root berisi 2 file + 1 subfolder; subfolder berisi 1 file.
+        val tree = mapOf(
+            "root" to listOf(f("a.txt"), f("b.txt"), d("sub")),
+            "u:sub" to listOf(f("c.txt"))
+        )
+        val emissions = mutableListOf<ToolProgress>()
+        scannerOf(tree).walk("root", includeHidden = true) { emissions.add(it) }
+
+        // done = folder selesai + file terlihat: setelah root = 1+2, setelah sub = 2+3.
+        assertEquals(3, emissions.first().done)
+        val last = emissions.last()
+        assertEquals(5, last.done)
+        assertTrue(last.totalEstimate >= last.done)
+        // totalEstimate tetap monotonik walau tumbuh saat discovery.
+        assertTrue(emissions.zipWithNext().all { (prev, next) -> next.totalEstimate >= prev.totalEstimate })
+    }
 }

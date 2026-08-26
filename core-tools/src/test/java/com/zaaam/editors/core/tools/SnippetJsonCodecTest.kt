@@ -1,6 +1,7 @@
 package com.zaaam.editors.core.tools
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -83,5 +84,27 @@ class SnippetJsonCodecTest {
         val result = SnippetJsonCodec.parse(json)
         assertTrue(result is SnippetParseResult.Ok)
         assertEquals(1, (result as SnippetParseResult.Ok).snippets.size)
+    }
+
+    @Test
+    fun `nesting jauh di atas batas ditolak tanpa StackOverflowError`() {
+        // Input untrusted (import user): rekursi parseValue↔parseArray dulu tak berbatas,
+        // StackOverflowError (Error, bukan Exception) lolos dari catch parseOrNull → crash proses.
+        val deep = "[".repeat(5000) + "]".repeat(5000)
+        assertNull(JsonMini.parseOrNull(deep))
+    }
+
+    @Test
+    fun `nesting di bawah batas tetap sah`() {
+        // 50 level << JSON_MAX_DEPTH: guard depth tidak boleh mengubah perilaku dokumen normal.
+        val json = "[".repeat(50) + "]".repeat(50)
+        assertTrue(JsonMini.parseOrNull(json) is List<*>)
+    }
+
+    @Test
+    fun `codec menolak dokumen nesting patologis sebagai BadSchema`() {
+        val deep = "[".repeat(5000) + "]".repeat(5000)
+        val payload = """{"schema":"zaaam-snippets","version":1,"snippets":$deep}"""
+        assertEquals(SnippetParseResult.BadSchema, SnippetJsonCodec.parse(payload))
     }
 }

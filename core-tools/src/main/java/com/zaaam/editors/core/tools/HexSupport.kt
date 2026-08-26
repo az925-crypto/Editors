@@ -23,8 +23,9 @@ internal fun toAscii(b: Byte): Char? {
 }
 
 internal fun formatRow(bytes: ByteArray, rowStart: Int): List<ByteCell> {
+    // Offset negatif = state korup dari UI → tolak diam-diam sebelum hitung end.
+    if (rowStart < 0 || rowStart >= bytes.size) return emptyList()
     val end = minOf(rowStart + HEX_ROW_BYTES, bytes.size)
-    if (rowStart >= bytes.size) return emptyList()
     val cells = mutableListOf<ByteCell>()
     for (i in rowStart until end) cells.add(ByteCell(byteToHex(bytes[i]), toAscii(bytes[i])))
     return cells
