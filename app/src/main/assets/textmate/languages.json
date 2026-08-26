@@ -3,37 +3,37 @@
     {
       "name": "html",
       "scopeName": "text.html.basic",
-      "path": "./html.tmLanguage.json"
+      "grammar": "textmate/html.tmLanguage.json"
     },
     {
       "name": "css",
       "scopeName": "source.css",
-      "path": "./css.tmLanguage.json"
+      "grammar": "textmate/css.tmLanguage.json"
     },
     {
       "name": "javascript",
       "scopeName": "source.js",
-      "path": "./javascript.tmLanguage.json"
+      "grammar": "textmate/javascript.tmLanguage.json"
     },
     {
       "name": "kotlin",
       "scopeName": "source.kotlin",
-      "path": "./kotlin.tmLanguage.json"
+      "grammar": "textmate/kotlin.tmLanguage.json"
     },
     {
       "name": "python",
       "scopeName": "source.python",
-      "path": "./python.tmLanguage.json"
+      "grammar": "textmate/python.tmLanguage.json"
     },
     {
       "name": "json",
       "scopeName": "source.json",
-      "path": "./json.tmLanguage.json"
+      "grammar": "textmate/json.tmLanguage.json"
     },
     {
       "name": "plaintext",
       "scopeName": "text.plain",
-      "path": "./plain.tmLanguage.json"
+      "grammar": "textmate/plain.tmLanguage.json"
     }
   ]
 }

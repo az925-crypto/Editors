@@ -85,4 +85,5 @@ Di-refresh 2026-08-26 pasca-Phase 2 (6 layar ALAT: analisa, duplikat, ganti mass
 
 ## 12. Release
 - [ ] Bump versionCode/versionName → push main → CI hijau → tag `vX.Y.Z` → Release workflow hijau + APK muncul di Releases
-- [ ] Update-over-install dari v0.1.x tanpa uninstall (data prefs SAF tree uri + recents kebaca lagi; snippets mulai kosong = normal)
+- [ ] **Smoke-test APK RELEASE (bukan debug) di device:** buka app → tidak force close saat cold start (preload TextMate), dialog SAF muncul, buka file teks → highlighting jalan
+- [ ] Update-over-install dari v0.1.x/v0.2.x tanpa uninstall (data prefs SAF tree uri + recents kebaca lagi; snippets mulai kosong = normal)

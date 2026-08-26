@@ -1,7 +1,7 @@
 # Progress & Handoff — zaaam/editors
 
-**Tanggal:** 2026-08-26 (update: **PHASE 2 TUNTAS end-to-end** — engine :core-tools + UI 6 layar ALAT + reviewer blocking bersih; rilis v0.2.0 mengikuti)
-**HEAD:** `c801d5e` (main) — CI hijau; WAJIB cek ulang (`gh run list --limit 1`) sebelum lanjut apapun
+**Tanggal:** 2026-08-26 (update: **v0.2.1 — fix CRITICAL FC cold start di device** (languages.json salah kunci vs sora reader); Phase 2 tuntas + rilis ulang)
+**HEAD:** lihat `git log -1` — WAJIB cek CI (`gh run list --limit 1`) sebelum lanjut apapun
 **Repo:** https://github.com/az925-crypto/Editors.git
 **Package:** `com.zaaam.editors` — minSdk 26 / targetSdk 36 / compileSdk 36 / Kotlin 2.4.10 / AGP 9.3.0 / Gradle 9.5.0 / JDK 21
 **Tag rilis stabil:** `v0.1.2` (`cad2d29`). Tag `v0.2.0` = bump versionCode=4/versionName=0.2.0 → tag setelah docs commit ini.
@@ -27,6 +27,7 @@
 10. **User sering benerin sendiri via zip** (`~/git/Editors-main-fixed*.zip`, export GitHub tanpa `.github`/dotfiles). Cara apply: `unzip -d /tmp/opencode/x`, `diff -rq` vs working tree (exclude `.git/.github/.gitignore/tmp-apk/`), review diff, copy file yang relevan, jangan overwrite `.github`.
 11. **Peta lengkap seluruh file + penjelasan per file: `STRUCTURE.md` (root)** — baca SEBELUM sentuh kode. Berisi: alur data inti, kontrak `editorContents`, isi/gotcha tiap file, lokasi tiap masalah terbuka, dan status file (aktif/reserved/dihapus).
 12. `ah.txt` sudah DIHAPUS (snapshot basi pra-Sora). Sejak Fase 4, `PreviewWebViewFactory.kt` + `ConsoleBridge` BENAR-BENAR TERPAKAI (bridge terpasang + rate-limited) — jangan dihapus. Yang benar-benar sudah dibuang: 5 stub UI komponen + stub AutoSaveController (commit `7d23b56`).
+13. **CRITICAL (v0.2.1 — FC cold start di device):** sora 0.23.6 `LanguageDefinitionReader` membaca kunci **`"grammar"`** di tiap entri `languages.json` (BUKAN `"path"`) + path asset TANPA prefix `./`. Salah format = NPE di preload startup → seluruh proses mati sebelum UI. Tidak pernah ketahuan karena CI tidak menjalankan app dan APK release baru pertama kali dipasang device saat v0.2.0. Pengaman: `TextMateAssetsContractTest` (CI) + initTextMate try-catch (degradasi tanpa highlighting, tidak bunuh proses). **PELAJARI: unit test JVM hijau ≠ app jalan di device; smoke-test APK RELEASE di device adalah bagian dari definisi selesai rilis.**
 
 ---
 
