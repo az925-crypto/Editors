@@ -4,7 +4,7 @@
 **HEAD:** lihat `git log -1` — WAJIB cek CI (`gh run list --limit 1`) sebelum lanjut apapun
 **Repo:** https://github.com/az925-crypto/Editors.git
 **Package:** `com.zaaam.editors` — minSdk 26 / targetSdk 36 / compileSdk 36 / Kotlin 2.4.10 / AGP 9.3.0 / Gradle 9.5.0 / JDK 21
-**Tag rilis stabil:** `v0.1.2` (`cad2d29`). Tag `v0.2.0` = bump versionCode=4/versionName=0.2.0 → tag setelah docs commit ini.
+**Tag rilis stabil:** `v0.3.0` — live preview split (versionCode=6). Sebelumnya: `v0.2.1` (fix FC cold start), `v0.1.2`.
 
 ---
 
