@@ -27,7 +27,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -42,26 +41,14 @@ import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.zaaam.editors.core.preview.ConsoleEntry
-import com.zaaam.editors.core.preview.PreviewWebViewFactory
 import com.zaaam.editors.core.fs.isWebFile
 import com.zaaam.editors.di.AppContainer
 import com.zaaam.editors.ui.theme.RetroTokens
 
-// MEDIUM FIX: holder biasa (bukan Compose State) untuk html terakhir yang benar-benar
-// dimuat ke WebView — pola sama dengan JobHolder di EditorScreen. Perubahan nilainya
-// murni imperatif lintas-lambda (factory & update), tidak boleh memicu invokasi ulang
-// AndroidView.update{} sendiri.
-private class LastLoadedHtmlHolder {
-    var value: String? = null
-}
-
-private class ReloadHolder {
-    var value: Int = -1
-}
-
+// Panel WebView + guard reload diekstrak ke PreviewWebViewPanel agar bisa dipakai
+// ulang pane split di layar Editor tanpa duplikasi logika muat/guard.
 private const val CONSOLE_COLLAPSED_DP = 40
 private const val CONSOLE_EXPANDED_MAX_DP = 320
 
@@ -137,31 +124,12 @@ fun PreviewScreen(container: AppContainer) {
             val renderedHtml = state.html.ifBlank {
                 DEMO_PREVIEW_HTML
             }
-            val lastLoadedHtml = remember { LastLoadedHtmlHolder() }
-            val appliedReload = remember { ReloadHolder() }
-            AndroidView(factory = { ctx ->
-                // SECURITY MEDIUM FIX: pakai PreviewWebViewFactory yang hardened penuh
-                // (allowContentAccess=false, akses file dari file URL dimatikan,
-                // safeBrowsingEnabled=true); Fase 4 menambah addJavascriptInterface di dalam
-                // factory SETELAH seluruh hardening + rate-limit bridge (lihat file itu).
-                PreviewWebViewFactory().create(ctx) { entry -> vm.addConsole(entry) }.apply {
-                    loadDataWithBaseURL(null, renderedHtml, "text/html", "utf-8", null)
-                    lastLoadedHtml.value = renderedHtml
-                    appliedReload.value = state.reloadSeq
-                }
-            }, update = { webView ->
-                // PERF MEDIUM FIX: hanya muat ulang kalau html benar-benar berubah,
-                // bukan tiap recomposition. Tombol ↻ menaikkan reloadSeq → holder di-reset
-                // sekali → muat paksa satu kali lalu guard normal jalan lagi.
-                if (appliedReload.value != state.reloadSeq) {
-                    appliedReload.value = state.reloadSeq
-                    lastLoadedHtml.value = null
-                }
-                if (renderedHtml != lastLoadedHtml.value) {
-                    webView.loadDataWithBaseURL(null, renderedHtml, "text/html", "utf-8", null)
-                    lastLoadedHtml.value = renderedHtml
-                }
-            }, modifier = Modifier.fillMaxSize())
+            PreviewWebViewPanel(
+                renderedHtml = renderedHtml,
+                reloadSeq = state.reloadSeq,
+                onConsole = vm::addConsole,
+                modifier = Modifier.fillMaxSize()
+            )
         }
         ConsoleDrawer(state = state, onToggle = vm::toggleConsole, onClear = vm::clearConsole)
     }
