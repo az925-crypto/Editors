@@ -98,7 +98,14 @@ fun AnalyzerScreen(container: AppContainer) {
                     Text("Pindai gagal \u2014 coba PINDAI ULANG.", color = RetroTokens.Muted, fontSize = 13.sp)
                 }
             }
-            st.result != null -> AnalysisBody(st.result!!, container)
+            // Gate DONE: root gagal menghasilkan FAILED + result terisi — jangan render body
+            // kosong yang menyesatkan ("folder kosong") padahal root-nya tak terbaca.
+            st.phase == ToolScanPhase.DONE && st.result != null -> AnalysisBody(st.result!!, container)
+            st.phase == ToolScanPhase.FAILED -> {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("Pindai gagal \u2014 coba PINDAI ULANG.", color = RetroTokens.Muted, fontSize = 13.sp)
+                }
+            }
         }
     }
 }

@@ -57,9 +57,3 @@ data class ReplaceOutcome(val newText: String, val count: Int)
 
 // Laporan per file saat scan find-replace; outcome null = file tak terbaca/bukan teks.
 data class FileFindReport(val node: ToolNode, val outcome: FindOutcome?)
-
-sealed interface ReplaceFileOutcome {
-    data class Success(val count: Int) : ReplaceFileOutcome
-    data object ChangedSkipped : ReplaceFileOutcome
-    data object Failed : ReplaceFileOutcome
-}

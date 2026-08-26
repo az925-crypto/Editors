@@ -55,23 +55,29 @@ private const val MSG_SNIPPET_IO = "Operasi file gagal"
 @Composable
 fun SnippetsScreen(container: AppContainer) {
     val repo = container.snippetRepository
-    var snippets by remember { mutableStateOf(repo.load()) }
+    // Load TIDAK di main thread (parse JSON linear — 1000 snippet bisa puluhan ms):
+    // mulai kosong, isi via LaunchedEffect + withContext(IO).
+    var snippets by remember { mutableStateOf(emptyList<Snippet>()) }
     var editing by remember { mutableStateOf<Snippet?>(null) } // null = tidak ngedit; Snippet = edit; Snippet kosong = baru
     var showForm by remember { mutableStateOf(false) }
     var importReport by remember { mutableStateOf<String?>(null) }
     var ioError by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
-    LaunchedEffect(Unit) { snippets = repo.load() }
+    LaunchedEffect(Unit) {
+        snippets = withContext(container.ioDispatcher) { repo.load() }
+    }
 
-    fun reload() { snippets = repo.load() }
+    fun reload() {
+        scope.launch { snippets = withContext(container.ioDispatcher) { repo.load() } }
+    }
 
     fun importFrom(uriStr: String) {
         scope.launch {
             when (val r = withContext(container.ioDispatcher) { container.fileSystem.readText(Uri.parse(uriStr)) }) {
                 is FsResult.Error -> ioError = true
                 is FsResult.Success -> {
-                    when (val outcome = repo.importJson(r.value)) {
+                    when (val outcome = withContext(container.ioDispatcher) { repo.importJson(r.value) }) {
                         is SnippetImportOutcome.Imported -> {
                             importReport = "${outcome.added} snippet ditambah \u00b7 " +
                                 "${outcome.skippedExisting} dilewati (sudah ada) \u00b7 " +
@@ -97,8 +103,16 @@ fun SnippetsScreen(container: AppContainer) {
                     val written = withContext(container.ioDispatcher) {
                         container.fileSystem.writeText(created.value, repo.exportJson())
                     }
-                    if (written is FsResult.Success) importReport = "Terekspor ke $name."
-                    else ioError = true
+                    if (written is FsResult.Success) {
+                        // Nama AKTUAL dari provider (bisa di-rename jadi " (1)" kalau bentrok).
+                        val actualName = try {
+                            android.provider.DocumentsContract.getDocumentId(created.value)
+                                .substringAfterLast(":")
+                        } catch (_: Exception) {
+                            name
+                        }
+                        importReport = "Terekspor ke $actualName."
+                    } else ioError = true
                 }
             }
         }
@@ -183,16 +197,22 @@ fun SnippetsScreen(container: AppContainer) {
         SnippetFormSheet(
             original = editing,
             onSave = { name, language, tagsCsv, code ->
-                if (editing == null) repo.add(name, language, tagsCsv, code)
-                else repo.update(editing!!.id, name, language, tagsCsv, code)
-                reload()
-                showForm = false
+                scope.launch {
+                    withContext(container.ioDispatcher) {
+                        if (editing == null) repo.add(name, language, tagsCsv, code)
+                        else repo.update(editing!!.id, name, language, tagsCsv, code)
+                    }
+                    reload()
+                    showForm = false
+                }
             },
             onDelete = editing?.let { s ->
                 {
-                    repo.delete(s.id)
-                    reload()
-                    showForm = false
+                    scope.launch {
+                        withContext(container.ioDispatcher) { repo.delete(s.id) }
+                        reload()
+                        showForm = false
+                    }
                 }
             },
             onDismiss = { showForm = false }

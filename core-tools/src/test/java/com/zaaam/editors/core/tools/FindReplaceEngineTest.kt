@@ -41,6 +41,19 @@ class FindReplacePureTest {
     }
 
     @Test
+    fun `preview dibatasi window bukan satu baris penuh`() {
+        // File minified: 2MB satu baris — dulu substring baris penuh × 50 preview ≈ 100MB heap.
+        val big = "x".repeat(300_000) + "NEEDLE" + "y".repeat(300_000)
+        val outcome = findMatches(big, "NEEDLE", ignoreCase = false, maxPreviews = 50)
+
+        val p = outcome.previews.single()
+        assertTrue("window preview harus kecil: ${p.lineText.length}", p.lineText.length <= 64 + 6 + 64 + 1)
+        assertEquals(1, p.lineNumber) // tetap terhitung satu baris walau window pendek
+        assertEquals(64, p.startInLine)
+        assertEquals(70, p.endInLine)
+    }
+
+    @Test
     fun `maxPreviews membatasi preview tanpa bohong soal total`() {
         val outcome = findMatches("ab ab ab ab", "ab", false, maxPreviews = 2)
         assertEquals(4, outcome.totalMatches)

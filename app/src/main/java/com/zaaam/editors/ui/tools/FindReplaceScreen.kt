@@ -118,6 +118,8 @@ fun FindReplaceScreen(container: AppContainer) {
     }
 
     fun runReplace() {
+        // Kontrak reviewer: jangan pernah menulis file dengan query kosong (write percuma).
+        if (query.isBlank() || replacement.isEmpty()) return
         // Snapshot fase-scan dibaca SEKALI per file lalu engine verifikasi ulang
         // (replaceVerified re-read + compare) — interaksi autosave tercakup di sana.
         val targets = reports.filter {
@@ -229,11 +231,11 @@ fun FindReplaceScreen(container: AppContainer) {
             }
         }
 
-        // Kontrak reviewer: disabled kalau tidak ada target pending / replacement kosong.
+        // Kontrak reviewer: disabled kalau query/replacement kosong / tidak ada target pending.
         ToolsPrimaryButton(
             text = "GANTI DI ${pending.size} FILE ($pendingLocations LOKASI)",
             onClick = { confirmVisible = true },
-            enabled = pending.isNotEmpty() && replacement.isNotEmpty(),
+            enabled = query.isNotBlank() && replacement.isNotEmpty() && pending.isNotEmpty(),
             modifier = Modifier
                 .padding(start = 14.dp, end = 14.dp, bottom = 14.dp)
                 .fillMaxWidth()

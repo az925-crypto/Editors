@@ -78,6 +78,7 @@ fun HexScreen(container: AppContainer) {
     var oversize by remember { mutableStateOf(false) }
     var loadError by remember { mutableStateOf(false) }
     var led by remember { mutableStateOf(LedState.IDLE) }
+    var ledOwner by remember { mutableStateOf<String?>(null) } // uri pemilik LED — anti timer lintas-file
     var editingIndex by remember { mutableStateOf<Int?>(null) }
     var jumpText by remember { mutableStateOf("0x00000000") }
     val listState = rememberLazyListState()
@@ -176,9 +177,16 @@ fun HexScreen(container: AppContainer) {
                 )
                 Spacer(Modifier.weight(1f))
             }
-            loadError || bytes.isEmpty() -> {
+            loadError -> {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(MSG_HEX_LOAD, color = RetroTokens.Muted, fontSize = 13.sp)
+                }
+            }
+            bytes.isEmpty() -> {
+                // File 0-byte SAH — bedakan dari gagal muat; simpan tetap bisa menulis isi baru.
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("(file kosong \u2014 edit byte pertama lewat offset 0 setelah ada isi)",
+                        color = RetroTokens.DimBone, fontSize = 12.sp, fontFamily = FontFamily.Monospace)
                 }
             }
             else -> {
@@ -255,13 +263,15 @@ fun HexScreen(container: AppContainer) {
                         val uriStr = target ?: return@ToolsPrimaryButton
                         scope.launch {
                             led = LedState.SAVING
+                            ledOwner = uriStr // guard: timer reset lama tidak boleh menyentuh file lain
                             val result = withContext(container.ioDispatcher) {
                                 container.fileSystem.writeBytes(Uri.parse(uriStr), bytes)
                             }
+                            if (ledOwner != uriStr) return@launch // target sudah berganti saat menulis
                             led = if (result is FsResult.Success) LedState.SAVED else LedState.ERROR
                             if (result is FsResult.Success) modified = emptyMap()
                             delay(2000)
-                            if (led == LedState.SAVED) led = LedState.IDLE
+                            if (ledOwner == uriStr && led == LedState.SAVED) led = LedState.IDLE
                         }
                     }, enabled = led != LedState.SAVING)
                 }

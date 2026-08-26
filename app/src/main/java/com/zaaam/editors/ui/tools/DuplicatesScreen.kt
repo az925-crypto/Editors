@@ -223,7 +223,12 @@ internal suspend fun openInEditor(container: AppContainer, uriStr: String, name:
     }
     when (result) {
         is FsResult.Success -> {
-            container.editorContents[uriStr] = result.value
+            // Jangan timpa snapshot memori file yang sudah terbuka & mungkin dirty di editor —
+            // addTab dedupe by uri, jadi cukup skip-overwrite (bug review UI r1).
+            val alreadyOpen = container.editorSession.tabs.value.any { it.uri == uriStr }
+            if (!alreadyOpen) {
+                container.editorContents[uriStr] = result.value
+            }
             container.editorSession.addTab(TabState(uriStr, name))
             container.screenState.value = com.zaaam.editors.session.AppScreen.EDITOR
         }

@@ -16,33 +16,47 @@ internal fun findMatches(text: String, query: String, ignoreCase: Boolean, maxPr
     if (query.isEmpty()) return FindOutcome(0, emptyList())
     var total = 0
     val previews = mutableListOf<MatchPreview>()
+    // Kursor baris berjalan: maju SEKALI melintasi teks (amortized O(n)) — dulu tiap
+    // preview rescan dari index 0 dan substring SATU BARIS PENUH; file minified 2MB
+    // satu-baris × 50 preview = ~100MB heap + ratusan juta iterasi.
+    var curLine = 0 // 0-based
+    var curLineStart = 0
+    var scannedTo = 0
+    fun advance(to: Int) {
+        if (to <= scannedTo) return
+        for (i in scannedTo until to) {
+            if (text[i] == '\n') {
+                curLine++
+                curLineStart = i + 1
+            }
+        }
+        scannedTo = to
+    }
     var idx = text.indexOf(query, 0, ignoreCase)
     while (idx >= 0) {
         total++
-        if (previews.size < maxPreviews) previews.add(previewAt(text, idx, query.length))
+        if (previews.size < maxPreviews) {
+            advance(idx)
+            // Window konteks terbatas dalam BARIS yang sama — bukan baris penuh.
+            val lineEndRaw = text.indexOf('\n', idx)
+            val lineEnd = if (lineEndRaw < 0) text.length else lineEndRaw
+            val ws = maxOf(curLineStart, idx - PREVIEW_CONTEXT_CHARS)
+            val we = minOf(lineEnd, idx + query.length + PREVIEW_CONTEXT_CHARS)
+            previews.add(
+                MatchPreview(
+                    lineNumber = curLine + 1, // 1-based untuk tampilan
+                    lineText = text.substring(ws, we),
+                    startInLine = idx - ws,
+                    endInLine = idx - ws + query.length
+                )
+            )
+        }
         idx = text.indexOf(query, idx + query.length, ignoreCase)
     }
     return FindOutcome(total, previews)
 }
 
-private fun previewAt(text: String, matchStart: Int, matchLen: Int): MatchPreview {
-    var lineNumber = 0
-    var lineStart = 0
-    for (i in 0 until matchStart) {
-        if (text[i] == '\n') {
-            lineNumber++
-            lineStart = i + 1
-        }
-    }
-    var lineEnd = text.indexOf('\n', matchStart)
-    if (lineEnd < 0) lineEnd = text.length
-    return MatchPreview(
-        lineNumber = lineNumber + 1, // 1-based untuk tampilan
-        lineText = text.substring(lineStart, lineEnd),
-        startInLine = matchStart - lineStart,
-        endInLine = matchStart - lineStart + matchLen
-    )
-}
+internal const val PREVIEW_CONTEXT_CHARS = 64
 
 internal fun replaceLiteral(text: String, from: String, to: String, ignoreCase: Boolean): ReplaceOutcome {
     if (from.isEmpty()) return ReplaceOutcome(text, 0)
@@ -78,7 +92,7 @@ class FindReplaceEngine(
         candidates: List<ToolNode>,
         query: String,
         ignoreCase: Boolean,
-        maxPreviewsPerFile: Int = 50,
+        maxPreviewsPerFile: Int = 12,
         onProgress: suspend (Int, Int) -> Unit = { _, _ -> }
     ): List<FileFindReport> = withContext(ioDispatcher) {
         val reports = mutableListOf<FileFindReport>()

@@ -56,7 +56,8 @@ data class TreeScanState(
 // tiga layar tidak pernah jalan sendiri. Pola job+generation disalin FilesViewModel (anti
 // hasil basi). Progress dari engine masuk lewat MutableStateFlow.update — konflasi bawaan
 // StateFlow adalah throttle sisi UI yang diminta kontrak engine (jangan ganti SharedFlow
-// tanpa buffer). State HANYA disentuh dari Main (scope Main.immediate); IO murni withContext.
+// tanpa buffer). update() thread-safe jadi callback engine boleh menulis dari dispatcher IO;
+// mutasi state lain (onTreeSelected, toggleHidden) dijalankan dari Main via scope Main.immediate.
 class TreeScanManager(
     private val fs: SafFileSystem,
     private val treeAccess: TreeAccess,
@@ -121,6 +122,10 @@ class TreeScanManager(
         val root = _state.value.rootUri ?: return
         val includeHidden = _state.value.includeHidden
         scanJob?.cancel()
+        // Hasil hash dupes milik walk LAMA otomatis basi — job-nya WAJIB ikut dibatalkan dan
+        // generasinya naik; kalau tidak, outcome lama bisa ter-apply ke tree baru (bug review).
+        dupesJob?.cancel()
+        dupesGeneration++
         val generation = ++scanGeneration
         _state.update {
             it.copy(
@@ -129,7 +134,6 @@ class TreeScanManager(
                 progressTotal = 0,
                 result = null,
                 error = null,
-                // Hasil dupes lama otomatis basi setelah tree diganti/rescan.
                 dupes = DupesState()
             )
         }
@@ -149,6 +153,8 @@ class TreeScanManager(
                 }
                 if (generation != scanGeneration) return@launch
                 _state.update {
+                    // Re-check DI DALAM update: cek-dulu-lalu-update bukan atomik lintas thread.
+                    if (generation != scanGeneration) return@update it
                     // Root gagal dibaca ≠ folder kosong: laporkan FAILED supaya UI menawarkan
                     // rescan; skippedDirs subfolder tetap DONE (resilient by design).
                     if (outcome.stats.rootFailed) {
@@ -200,7 +206,11 @@ class TreeScanManager(
                     }
                 }
                 if (generation != dupesGeneration) return@launch
-                _state.update { it.copy(dupes = it.dupes.copy(phase = ToolScanPhase.DONE, outcome = outcome)) }
+                _state.update {
+                    // Re-check DI DALAM update (anti TOCTOU lintas thread — bug review).
+                    if (generation != dupesGeneration) return@update it
+                    it.copy(dupes = it.dupes.copy(phase = ToolScanPhase.DONE, outcome = outcome))
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

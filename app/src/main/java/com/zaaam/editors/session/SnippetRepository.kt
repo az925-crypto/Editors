@@ -94,7 +94,10 @@ class SnippetRepository(private val prefs: SharedPreferences) {
         val raw = prefs.getString(PREF_KEY, null) ?: return emptyList()
         // File prefs korup (diubah luar / versi lama): jangan wipe prefs — tampilkan kosong,
         // simpan berikutnya akan menimpa dengan payload valid baru.
-        return (SnippetJsonCodec.parse(raw) as? SnippetParseResult.Ok)?.snippets ?: emptyList()
+        val parsed = (SnippetJsonCodec.parse(raw) as? SnippetParseResult.Ok)?.snippets ?: emptyList()
+        // Codec TIDAK dedup id (parse sukses utk id dobel dari file luar) — LazyColumn key
+        // wajib unik: pertama menang, konsisten dengan mergeSnippetsById.
+        return parsed.distinctBy { it.id }
     }
 
     fun saveAll(list: List<Snippet>) {
