@@ -213,6 +213,16 @@ Kirim <code>bugreport</code> (Developer Options → Take bug report) — crash h
 
 Repo ini dikembangkan dengan workflow ketat (CI-only builds, reviewer blocking paralel, dokumentasi Divio). Sebelum PR besar, bacalah [PROGRESS.md § BACA INI DULU](PROGRESS.md) — banyak jebakan yang sudah dipetakan agar kamu tidak jatuh ke lubang yang sama dua kali.
 
+## 📥 Dukungan & Sumber
+
+| | Link |
+|---|---|
+| 📥 Download APK terbaru | [GitHub Releases](https://github.com/az925-crypto/Editors/releases/latest) |
+| 💻 Source Code | [github.com/az925-crypto/Editors](https://github.com/az925-crypto/Editors) |
+| ☕ Support | [saweria.co/Zsmm](https://saweria.co/Zsmm) |
+| 📢 Channel update | [WhatsApp Channel](https://whatsapp.com/channel/0029Vb7ZuEK3QxRtvlO89u0u) |
+| 📋 Changelog lengkap | [CHANGELOG-v0.3.0.md](CHANGELOG-v0.3.0.md) |
+
 ## 📄 License
 
 App code: **MIT**. Sora Editor: **LGPL-2.1** (dynamic linking via dependency Gradle).
