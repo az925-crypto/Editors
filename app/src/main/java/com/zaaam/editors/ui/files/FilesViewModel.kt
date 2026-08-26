@@ -191,10 +191,12 @@ class FilesViewModel(private val container: AppContainer) : ViewModel() {
         }
         viewModelScope.launch {
             if (entry.kind == Kind.BINARY) {
-                container.editorSession.addTab(
-                    TabState(entry.uri.toString(), entry.name, binary = true)
-                )
-                container.screenState.value = com.zaaam.editors.session.AppScreen.EDITOR
+                // Rider Phase 2: file biner TIDAK lagi bikin tab editor dummy — masuk
+                // hex editor (container.hexTargetUri di-consume HexScreen). Autosave tetap
+                // aman karena tab biner tidak pernah dibuat.
+                container.hexTargetUri.value = entry.uri.toString()
+                container.toolsTab.value = com.zaaam.editors.session.ToolsTab.HEX
+                container.screenState.value = com.zaaam.editors.session.AppScreen.TOOLS
                 return@launch
             }
             when (val result = container.fileSystem.readText(entry.uri)) {
@@ -226,10 +228,10 @@ class FilesViewModel(private val container: AppContainer) : ViewModel() {
                 return@launch
             }
             if (recent.kind == Kind.BINARY) {
-                container.editorSession.addTab(
-                    TabState(recent.uri, recent.name, binary = true)
-                )
-                container.screenState.value = com.zaaam.editors.session.AppScreen.EDITOR
+                // Rider Phase 2: sama seperti openFile — biner ke hex editor.
+                container.hexTargetUri.value = recent.uri
+                container.toolsTab.value = com.zaaam.editors.session.ToolsTab.HEX
+                container.screenState.value = com.zaaam.editors.session.AppScreen.TOOLS
                 return@launch
             }
             when (val result = container.fileSystem.readText(Uri.parse(recent.uri))) {
