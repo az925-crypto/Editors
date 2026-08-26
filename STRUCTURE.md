@@ -2,7 +2,7 @@
 
 **Untuk:** AI/user berikutnya yang ambil alih development.
 **Cara pakai:** baca `PROGRESS.md` dulu (state, pending fix, aturan kerja), lalu pakai file ini sebagai peta untuk navigasi kode. Setiap file dijelaskan: apa isinya, kenapa ada, dan jebakan yang perlu diketahui sebelum menyentuhnya.
-**Update terakhir:** 2026-08-26 — Phase 2 IN-FLIGHT: modul `:core-tools` (engine analyzer/duplikat/ganti-massal/heks/snippet) GREEN + reviewer engine BELUM jalan + UI belum dibangun. Rencana eksekusi lengkap: PROGRESS.md §PHASE 2 IN-FLIGHT. Mockup approved: `mockup/phase2.html`.
+**Update terakhir:** 2026-08-26 — **Phase 2 TUNTAS**: modul `:core-tools` GREEN + reviewer blocking bersih + UI 6 layar ALAT hidup end-to-end (mockup approved diikuti). Rilis v0.2.0 = bump versi → tag. Detail state: PROGRESS.md.
 
 ---
 
@@ -66,10 +66,10 @@ editors/
 ├── core-editor/                # MODUL: wrapper Sora code editor (lihat §4)
 ├── core-fs/                    # MODUL: filesystem SAF (lihat §5) — kini ada API bytes juga
 ├── core-preview/               # MODUL: compose HTML utk preview (lihat §6)
-├── core-tools/                 # MODUL BARU Phase 2: engine alat (lihat §6b) — UI in-flight
+├── core-tools/                 # MODUL Phase 2: engine alat + UI ALAT (lihat §6b + §3.6) — TUNTAS
 ├── docs/
 │   ├── design-spec.md          # Spec visual RetroTokens/LCD — sumber kebenaran styling
-│   └── qa-manual.md            # Skrip QA manual v0.1.2 — refresh 2026-08-25 (preview live + console)
+│   └── qa-manual.md            # Skrip QA manual v0.2.0 — refresh 2026-08-26 (6 layar ALAT Phase 2)
 ├── gradle/
 │   ├── libs.versions.toml      # SATU-SATUNYA tempat versi dependency
 │   └── wrapper/                # gradle-wrapper 9.5.0
@@ -132,11 +132,29 @@ Package root: `com.zaaam.editors`. Semua UI Compose, Material3, tema kustom Retr
 | File | Isi & hal penting |
 |---|---|
 | `ui/components/SafDialog.kt` | Dialog SAF blocking sesuai design-spec §9.5: scrim blocking, rows checklist, error banner, tombol Pilih folder / Nanti. Satu-satunya komponen shared yang real. |
-| `ui/theme/Color.kt` | `object RetroTokens` — palet LCD: Shell, Card, Graphite, Dim, Ink, Olive, Brick, BrickWash, LedOrange, LedGreen, LcdBg, Border, dst. Dipakai hampir semua screen. |
+| `ui/theme/Color.kt` | `object RetroTokens` — palet LCD: Shell, Card, Graphite, Dim, Ink, Olive, Brick, BrickWash, LedOrange, LedGreen, LcdBg, Border, dst. Dipakai hampir semua screen. **Phase 2 TAMBAHAN (token lama jangan diubah):** Muted #8A867C, DimBone #B9B3A0, Graphite2, LcdDim #5A6340 (offset heks), HairlineLcd, OliveHover #C7D46B (byte ter-modifikasi), OlivePress. |
 | `ui/theme/Theme.kt` | `RetroTheme`: lightColorScheme mapping RetroTokens → Material3. Dipanggil MainActivity. |
 | `ui/theme/Shape.kt` | `object RetroShapes` — token radius. **BELUM ter-wire** (0 referensi) — sengaja disimpan sebagai vocabulary design-system Fase 4. |
 | `ui/theme/Type.kt` | `object RetroTypography` — token text style (DisplayHero … UrlBar). **BELUM ter-wire** (0 referensi) — idem, jangan hapus. |
 | ~~`ui/components/{Bevel,BootOverlay,BottomNavPhysical,HardwareBar,LedIndicator}.kt`~~ | **DIHAPUS** (bersih-bersih 2026-08-25): stub satu baris `Text("…")` tanpa logika, 0 referensi. Butuh lagi? `git log --diff-filter=D -- '**/components/'` lalu checkout dari commit sebelum penghapusan. |
+
+### 3.6 Layar ALAT (Phase 2 — semua hidup end-to-end)
+
+Navigasi sub-alat TIDAK pakai nav-compose: `container.toolsTab: MutableStateFlow<ToolsTab>` (enum HUB/ANALYZE/DUPES/FIND_REPLACE/HEX/SNIPPETS) + BackHandler sub-tab→HUB di wrapper. Entry hex dari Files: `container.hexTargetUri` (rider openFile/openRecent BINARY — tab editor biner dummy DIHAPUS).
+
+| File | Isi & gotcha |
+|---|---|
+| `session/ToolsTab.kt` | Enum sub-tab. |
+| `session/TreeScanManager.kt` | Walk tree SHARED Analyzer+Dupes+FindReplace (satu cache). Job+generation pola FilesViewModel; **rescan WAJIB cancel walk DAN dupesJob + bump dua generasi** (bug r1: outcome hash lama nyasar ke tree baru). Progress masuk via `_state.update` dari callback engine (thread-safe; conflation StateFlow = throttle sisi UI per kontrak). ScanStats.rootFailed → phase FAILED (bedakan dari folder kosong). Re-check generation DI DALAM update (TOCTOU). Restore prefs `saf_tree_uri` (satu sumber folder dengan Files; persist hanya kalau restorable). |
+| `session/SnippetRepository.kt` | prefs key `snippets_v1`; load() **dedup by id** (prefs luar bisa dobel → LazyColumn key crash); merge impor first-wins; helper PURE internal top-level tested: `humanBytes`, `clampHighlight` (kontrak MatchPreview multi-baris), `summarizeReplace`, `mergeSnippetsById`, `exportFileName`. Semua IO repo dipanggil off-main dari SnippetsScreen. |
+| `ui/tools/ToolsScreen.kt` | Wrapper: pill ttab sub-nav + switch pane + BackHandler(enabled = tab != HUB). |
+| `ui/tools/ToolsComponents.kt` | Komponen shared ala mockup: ToolsHeroCard/SectionLabel/Stencil(ledColor)/CartridgeRow/Chip/CheckSquare(tick rotasi)/Field/ProgressBar(guard total≤0)/BarRow/LedPill(blink infiniteTransition)/TagPill/BannerBrick/Note/Primary+SecondaryButton/Sheet(scrim pointerInput + kartu bawah). Tanpa shadow berat — border+background saja. |
+| `ui/tools/ToolsHubScreen.kt` | 5 cartridge AN/DQ/FR/HX/SN → set toolsTab. Key LazyColumn = enum name (it.third). |
+| `ui/tools/AnalyzerScreen.kt` | ensureScan saat masuk; gate body `phase==DONE` (rootFailed=FAILED jangan render body kosong); aggregateAnalysis di remember(result); chip hidden toggle → auto rescan. |
+| `ui/tools/DuplicatesScreen.kt` | runDupes otomatis via LaunchedEffect(st.result) saat DONE && dupes IDLE; grup expandable (key uri node pertama), checkbox kosmetik **TANPA hapus**; BUKA › → openInEditor (**skip-overwrite editorContents kalau uri sudah terbuka/dirty**); footer stats changedDuringScan. |
+| `ui/tools/FindReplaceScreen.kt` | Engine instance remember dengan lambda injected; scan→reports; selectedUris default semua match; tombol GANTI butuh query.isNotBlank + replacement non-empty + pending>0 (kontrak reviewer); sheet destruktif; replace per file = baca snapshot sekali → replaceVerified; status per file Success/BERUBAH—DILEWATI/GAGAL; highlight PreviewLine via clampHighlight. |
+| `ui/tools/HexScreen.kt` | Kontrak perf: formatRow HANYA per row visible `remember(version,rowStart)`; ByteArray mutasi in-place + version bump (JANGAN copy 16MB/edit); `modified: Map<Int,Byte>` nilai original utk highlight & undo restore; undo cap 32; LED owner-guard (`ledOwner` uri — timer reset tak boleh menyentuh file lain); banner file-juga-di-editor dari editorSession.tabs; guard >16MB (oversize) & branch file 0-byte; lompat offset IME Search parse hex. Save = writeBytes seluruh isi (SAF tanpa random-access). |
+| `ui/tools/SnippetsScreen.kt` | Load/mutasi SEMUA withContext(IO); form mini tambah/edit/hapus; EKSPOR OpenDocumentTree→createFile("application/json", exportFileName)→writeText, nama lapor = getDocumentId aktual; IMPOR OpenDocument(json/octet-stream/plain)→readText(guard 2MB)→importJson→sheet hasil; CODEXA disabled α.45. |
 
 ---
 
@@ -175,9 +193,9 @@ Namespace `com.zaaam.editors.core.preview`. Modul kecil, bergantung `:core-fs`.
 
 ---
 
-## 6b. Modul `:core-tools` — Phase 2 Engine (GREEN; UI in-flight)
+## 6b. Modul `:core-tools` — Phase 2 Engine (GREEN; reviewer trio blocking-no; UI hidup)
 
-Namespace `com.zaaam.editors.core.tools`. Depend `:core-fs`. SEMUA engine murni: uri String + lambda injected (pola AutosaveCoordinator) supaya test JVM murni jalan. Rencana UI + keputusan user terkunci: PROGRESS.md §PHASE 2 IN-FLIGHT.
+Namespace `com.zaaam.editors.core.tools`. Depend `:core-fs`. SEMUA engine murni: uri String + lambda injected (pola AutosaveCoordinator) supaya test JVM murni jalan. API publik untuk :app: TreeScanner/DuplicateFinder/FindReplaceEngine, seluruh ToolModels.kt (ReplaceFileOutcome SUDAH DIHAPUS — mati sejak UI pakai BatchReplaceSummary), aggregateAnalysis, HexSupport penuh, SnippetJsonCodec, Snippet/SnippetParseResult. JsonMini & JSON_MAX_DEPTH tetap internal.
 
 | File | Isi & gotcha |
 |---|---|
@@ -185,11 +203,11 @@ Namespace `com.zaaam.editors.core.tools`. Depend `:core-fs`. SEMUA engine murni:
 | `TreeScanner.kt` | DFS ITERATIF explicit stack (anti stack-overflow); folder gagal = skippedDirs++, lanjut sibling; ensureActive() per iterasi; hidden difilter saat walk kalau includeHidden=false (tidak turun ke dalamnya); onProgress(ToolProgress(WALK,…)). |
 | `StorageAnalyzer.kt` | `aggregateAnalysis()` pure internal — largestFiles top-N + largestDirs agregat TOP-LEVEL via relPath.substringBefore("/"); anak langsung root = label "(akar)". |
 | `DuplicateFinder.kt` | 4 fase: group size (1..100MB) → head SHA-1 64KB → **re-statSize guard** (beda = changedDuringScan, exclude — anti klaim duplikat dari data basi, termasuk korban autosave sendiri) → full SHA-1. sha1Streaming manual buffer 64KB. File 0-byte & oversize skip (oversizedSkipped). TIDAK ada aksi hapus di v0.2 (keputusan user). |
-| `FindReplaceEngine.kt` | findMatches/replaceLiteral LITERAL indexOf — BUKAN Regex (metachar query aman), non-overlapping, maxPreviews membatasi preview tanpa bohongi total. Engine.scan → FileFindReport (outcome null = file tak terbaca/ditolak guard teks). **replaceVerified = re-read + bandingkan snapshot scan** → ChangedSkipped kalau beda (interaksi autosave!). BatchReplaceSummary Success/ChangedSkipped/Failed. |
-| `HexSupport.kt` | MAX_HEX_FILE_BYTES=16MB (save=tulis balik utuh karena SAF tak punya random-access write — seluruh isi WAJIB di memori saat simpan), HEX_UNDO_MAX=32, formatRow 16 byte/baris → ByteCell(hex uppercase, ascii printable-only else null). |
-| `Snippet.kt` | Snippet(id,name,language,tags,code,updatedAtMs); `SnippetJsonCodec` encode/parse schema `zaaam-snippets` v1 — escaper ketat (", \\, \n\r\t, kontrol <0x20 → \uXXXX); parser JsonMini strict (JSON null sah, field asing diabaikan, entry rusak = skippedInvalid, schema/version mismatch = BadSchema). Interface `SnippetExchange` = adapter point Codexa (**BLOCKED menunggu spec eksternal** — jangan tulis kode Codexa sebelum spec ada). |
+| `FindReplaceEngine.kt` | findMatches/replaceLiteral LITERAL `indexOf(ignoreCase=true)` — BUKAN lowercase() (desink indeks 'İ' — bug CRITICAL sudah difix; regionMatches cocokkan İ↔i via simple mapping, indeks selalu koordinat asli); non-overlapping; **preview WINDOW ±PREVIEW_CONTEXT_CHARS=64 dalam baris** + kursor baris amortized O(n) (dulu substring baris penuh = ~100MB heap utk minified ×50), default maxPreviewsPerFile=12. Engine.scan → FileFindReport (outcome null = file tak terbaca/ditolak guard teks). **replaceVerified = re-read + bandingkan snapshot scan** → ChangedSkipped kalau beda (interaksi autosave!). BatchReplaceSummary Success/ChangedSkipped/Failed. |
+| `HexSupport.kt` | MAX_HEX_FILE_BYTES=16MB (save=tulis balik utuh karena SAF tak punya random-access write — seluruh isi WAJIB di memori saat simpan), HEX_UNDO_MAX=32, formatRow 16 byte/baris → ByteCell(hex uppercase, ascii printable-only else null). formatRow PUBLIC + guard rowStart<0/≥size → emptyList. **Kontrak UI: panggil per row visible LazyColumn + remember keyed (version,rowStart) — DILARANG precompute seluruh file.** |
+| `Snippet.kt` | Snippet(id,name,language,tags,code,updatedAtMs); `SnippetJsonCodec` PUBLIC encode/parse schema `zaaam-snippets` v1 — escaper ketat (", \\, \n\r\t, kontrol <0x20 → \uXXXX); parser JsonMini strict internal (**depth-guard JSON_MAX_DEPTH=128** anti SOE dari file untrusted; JSON null sah, field asing diabaikan, entry rusak = skippedInvalid, schema/version mismatch = BadSchema). Interface `SnippetExchange` = adapter point Codexa (**BLOCKED menunggu spec eksternal** — jangan tulis kode Codexa sebelum spec ada). |
 
-Test (semua GREEN): TreeScannerTest, StorageAnalyzerTest, DuplicateFinderTest, FindReplaceEngineTest (+pure fns), HexSupportTest, SnippetJsonCodecTest. coroutines-test WAJIB dideklarasikan eksplisit di build.gradle modul.
+Test (semua GREEN): TreeScannerTest (+siklus/rootFailed/progress-file), StorageAnalyzerTest, DuplicateFinderTest, FindReplaceEngineTest (+pure fns +regresi İ +window preview), HexSupportTest (+guard offset), SnippetJsonCodecTest (+nesting patologis). coroutines-test WAJIB dideklarasikan eksplisit di build.gradle modul. App module tambah: FormatHelpersTest, SnippetsSupportTest.
 
 ---
 
@@ -218,9 +236,9 @@ Test (semua GREEN): TreeScannerTest, StorageAnalyzerTest, DuplicateFinderTest, F
 | `PROGRESS.md` | ★ Handoff utama: aturan wajib (CI-only build, urutan workflow agent, quirks AGP9/Sora), state done/pending, daftar bug terverifikasi + snippet fix, backlog berprioritas, riwayat commit, command verifikasi CI. SELALU update setelah sesi kerja. |
 | `STRUCTURE.md` | File ini — peta struktur + penjelasan tiap file. |
 | `prd.md` | PRD draft v1.0: code editor + file manager + live preview utk developer HP. |
-| `README.md` | FINAL (Divio: tutorial/how-to/reference/explanation) — klaim sinkron kode (Sora 0.23.6, tanpa core-tools). |
+| `README.md` | FINAL (Divio: tutorial/how-to/reference/explanation) — klaim sinkron kode (Sora 0.23.6, 5 modul termasuk :core-tools). |
 | `docs/design-spec.md` | Spec visual lengkap (RetroTokens LCD, layout per layar, dialog SAF §9.5). Sumber kebenaran styling. |
-| `docs/qa-manual.md` | Skrip QA manual v0.1.2 — refresh 2026-08-25 pasca-Fase 4 (preview live, console bridge, autosave disk, flood test). |
+| `docs/qa-manual.md` | Skrip QA manual v0.2.0 — refresh 2026-08-26 pasca-Phase 2 (ALAT: analisa/dupes/ganti/heks/snippet + regresi lama). |
 | `mockup/index.html` | Mockup full-app v3 (approved) — sumber token & pola layar. |
 | `mockup/phase2.html` | Mockup Phase 2 (APPROVED user 2026-08-25): 6 pane ALAT — hub, analisa, duplikat, ganti massal, heks, snippet. UI Compose wajib mengikuti ini. |
 | `notes.txt` | Instruksi tetap dari user: build via CI saja, package naming, selalu rilis APK ke Releases, mockup-first untuk UI. |
@@ -228,24 +246,22 @@ Test (semua GREEN): TreeScannerTest, StorageAnalyzerTest, DuplicateFinderTest, F
 
 ---
 
-## 9. Status Cepat Masalah (state pasca-Fase 4 + rilis v0.1.2, 2026-08-25)
+## 9. Status Cepat Masalah (state pasca-Phase 2 tuntas, 2026-08-26)
 
-Semua item besar tuntas & reviewer blocking bersih: Fase 1-5 infra/core/autosave/hardening (lihat PROGRESS.md), **Fase 4 preview live end-to-end** (wiring tick+seed, urlbar nyata, ↻ fungsional, console drawer spec, bridge rate-limited), P2 (AutosaveCoordinator testable, isWebFile unifikasi, openTab hapus, readBounded test, text.plain grammar), rilis v0.1.2 hijau + APK.
+Semua fitur besar selesai & reviewer blocking bersih: Fase 1-5 infra/core/autosave/hardening, **Fase 4 preview live end-to-end**, P2 (AutosaveCoordinator dll), **PHASE 2 penuh — engine `:core-tools` + UI 6 layar ALAT** (dua putaran reviewer trio: engine r1 BLOCKING yes→fix→r2 no; UI r1 bug+perf yes→fix→r2 no; security & maintainability catatan backlog). Sisa kerja: rilis v0.2.0.
 
-**Phase 2 (2026-08-26): engine `:core-tools` GREEN (lihat §6b); reviewer engine BELUM jalan; UI 6 layar BELUM dibangun (mockup approved: mockup/phase2.html). Eksekusi lanjutan: PROGRESS.md §PHASE 2 IN-FLIGHT — itu sumber kebenaran, jangan mulai tanpa baca.**
-
-Sisa terbuka non-Phase-2 (detail: PROGRESS.md §Backlog Aktif):
+**Sisa terbuka non-blocking (detail: PROGRESS.md §Backlog Aktif):**
 
 | Masalah | Lokasi | Prioritas |
 |---|---|---|
-| Recompose seluruh PreviewScreen per pesan console (split collect) | PreviewScreen.kt | P3 perf |
-| Routing composeAndApply belum pure/testable; cek ekstensi `.endsWith` duplikatif di VM | PreviewViewModel.kt | P3 maintainability |
-| CancellationException tertelan catch(Exception) | SafFileSystemImpl.kt | P4 |
-| Bottom nav disabled logic §9.4 belum ada; html kosong → demo fallback | AppRoot/PreviewScreen | P4 |
-| Fonts bundling (`res/font` kosong) | res/font | Backlog |
-| Full-copy buffer ~2MB per window debounce di Main (amortized) | EditorScreen.kt subscribeEvent | Low |
+| Hex SIMPAN tanpa divergence-guard vs autosave | HexScreen.kt | P2 perf |
+| aggregateAnalysis di main compose (remember cukup utk tree normal) | AnalyzerScreen.kt | P3 perf |
+| Triplikasi buka-file + displayNameOf ×3; scaffold sheet ×3 | FilesViewModel/Duplicates/Hex/Snippets | P3 maint |
+| Query diedit pasca-scan → write percuma Success(0) | FindReplaceScreen.kt | P3 |
+| Recompose Preview per console; editorContents tanpa eviksi; bottom-nav disabled §9.4 | Preview/AppContainer/AppRoot | P4 |
+| SHA-1→256 dupes; MAX_WALK_NODES; writeBytes truncate non-atomik (limitasi SAF) | core-tools/core-fs | backlog |
 
-Known limitation SENGAJA (jangan "dibenerin" tanpa paham trade-off): ketikan ~900ms terakhir sebelum closeTab tidak tersimpan (anti-resurrect); job autosave in-flight tidak dicancel (anti file kepotong); placeholder composer exact-string casing-sensitive; `compose(html,null,null)` identity.
+Known limitation SENGAJA (jangan "dibenerin" tanpa paham trade-off): ketikan ~900ms terakhir sebelum closeTab tidak tersimpan (anti-resurrect); job autosave in-flight tidak dicancel (anti file kepotong); placeholder composer exact-string casing-sensitive; `compose(html,null,null)` identity; hex highlight tetap menyala setelah undo ke nilai asli persis.
 
 ---
 
