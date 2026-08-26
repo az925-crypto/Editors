@@ -227,6 +227,20 @@ class SafFileSystemImpl(private val resolver: ContentResolver) : SafFileSystem {
         }
     }
 
+    // Dupes hashing butuh STREAMING (baca 64KB head / full-hash buffer) — readBytes memuat
+    // seluruh isi ke memori. Stream dititipkan mentah ke caller: WAJIB close (use{}).
+    override suspend fun readStream(uri: Uri): FsResult<java.io.InputStream> = withContext(Dispatchers.IO) {
+        try {
+            val stream = resolver.openInputStream(uri)
+                ?: return@withContext FsResult.Error(Exception("Tidak bisa membuka file"))
+            FsResult.Success(stream)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            FsResult.Error(e)
+        }
+    }
+
     override suspend fun createFile(parentUri: Uri, mimeType: String, displayName: String): FsResult<Uri> =
         withContext(Dispatchers.IO) {
             try {

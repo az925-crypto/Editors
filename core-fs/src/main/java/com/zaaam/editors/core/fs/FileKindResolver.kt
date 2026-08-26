@@ -35,6 +35,11 @@ interface SafFileSystem {
     suspend fun readBytes(uri: Uri, maxBytes: Long): FsResult<ByteArray>
     suspend fun writeBytes(uri: Uri, bytes: ByteArray): FsResult<Unit>
     suspend fun createFile(parentUri: Uri, mimeType: String, displayName: String): FsResult<Uri>
+
+    // Phase 2 (dupes): stream mentah untuk hashing streaming — readBytes memuat seluruh
+    // file ke memori (100MB file = OOM), ini tidak. PEMANGGIL WAJIB close() stream
+    // (pola stream.use{}); stream hanya valid sampai ditutup.
+    suspend fun readStream(uri: Uri): FsResult<java.io.InputStream>
 }
 
 class TreeAccess(private val contentResolver: android.content.ContentResolver) {
