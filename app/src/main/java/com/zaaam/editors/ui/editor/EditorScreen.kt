@@ -82,10 +82,11 @@ fun EditorScreen(container: AppContainer) {
     val previewState by previewVm.uiState.collectAsState()
     val splitEnabled by container.splitPreviewEnabled.collectAsState()
 
-    // Seed instan dokumen aktif ke shared VM saat tab berganti (kontrak sama dengan
-    // LaunchedEffect(activeUri) milik PreviewScreen) supaya pane tidak menunggu tick
-    // pertama ketika split baru dinyalakan / pindah antar file web.
-    LaunchedEffect(state.activeUri) {
+    // Seed instan dokumen aktif ke shared VM saat tab berganti ATAU flag split berbalik.
+    // WHY splitEnabled sebagai key: tick collector di VM digerbangi konsumen — ketikan saat
+    // split OFF tidak pernah sampai compose, jadi saat chip dinyalakan pane harus di-seed
+    // ulang eksplisit agar tidak menampilkan html basi dari sesi terakhir.
+    LaunchedEffect(state.activeUri, splitEnabled) {
         if (isWebFile(state.activeUri)) previewVm.showActiveFile(state.activeUri)
     }
 
@@ -276,7 +277,16 @@ fun EditorScreen(container: AppContainer) {
             if (showSplit) {
                 // WHY divider 1.dp Border (bukan shadow/elevation): bahasa visual retro-lcd
                 // pakai hairline, bukan elevasi Material. Posisi = garis batas fraksi 0.5.
+                // WHY digambar SETELAH pane: z-order Box mengikuti urutan komposisi — kalau
+                // duluan, strip 1dp tertelan background opaque pane dan hairline tak terlihat.
                 if (isPortrait) {
+                    SplitPreviewPane(
+                        activeDisplayName = state.tabs.firstOrNull { it.uri == state.activeUri }?.displayName ?: "",
+                        renderedHtml = previewState.html,
+                        isLoading = previewState.isLoading,
+                        onConsole = previewVm::addConsole,
+                        modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth().fillMaxHeight(0.5f)
+                    )
                     Box(
                         modifier = Modifier
                             .align(Alignment.TopStart)
@@ -285,14 +295,14 @@ fun EditorScreen(container: AppContainer) {
                             .height(1.dp)
                             .background(RetroTokens.Border)
                     )
+                } else {
                     SplitPreviewPane(
                         activeDisplayName = state.tabs.firstOrNull { it.uri == state.activeUri }?.displayName ?: "",
                         renderedHtml = previewState.html,
                         isLoading = previewState.isLoading,
                         onConsole = previewVm::addConsole,
-                        modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth().fillMaxHeight(0.5f)
+                        modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight().fillMaxWidth(0.5f)
                     )
-                } else {
                     Box(
                         modifier = Modifier
                             .align(Alignment.CenterStart)
@@ -300,13 +310,6 @@ fun EditorScreen(container: AppContainer) {
                             .offset(x = maxWidth * 0.5f)
                             .width(1.dp)
                             .background(RetroTokens.Border)
-                    )
-                    SplitPreviewPane(
-                        activeDisplayName = state.tabs.firstOrNull { it.uri == state.activeUri }?.displayName ?: "",
-                        renderedHtml = previewState.html,
-                        isLoading = previewState.isLoading,
-                        onConsole = previewVm::addConsole,
-                        modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight().fillMaxWidth(0.5f)
                     )
                 }
             }

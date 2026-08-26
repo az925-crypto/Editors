@@ -6,6 +6,7 @@ import com.zaaam.editors.core.fs.isWebFile
 import com.zaaam.editors.core.preview.ConsoleEntry
 import com.zaaam.editors.core.preview.PreviewComposer
 import com.zaaam.editors.di.AppContainer
+import com.zaaam.editors.session.AppScreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -45,6 +46,15 @@ class PreviewViewModel(private val container: AppContainer) : ViewModel() {
     init {
         viewModelScope.launch {
             container.previewTick.collect { tick ->
+                // PERF (review): compose tiap burst hanya saat ADA KONSUMEN — layar Preview
+                // penuh atau pane split nyala di layar Editor. Tanpa gerbang ini pipeline
+                // compose jalan permanen begitu Editor pernah dibuka (VM activity-scoped),
+                // buang CPU/baterai percuma di low-end. Konsumen lain tidak mungkin ada:
+                // WebView preview hanya termount di dua tempat itu.
+                val screen = container.screenState.value
+                val consumerActive = screen == AppScreen.PREVIEW ||
+                    (screen == AppScreen.EDITOR && container.splitPreviewEnabled.value)
+                if (!consumerActive) return@collect
                 // Relevansi: hanya compose ulang kalau yang berubah memang dokumen terpilih
                 // dan masih ada di contentMap (belum closeTab).
                 if (tick.uri == shownUri && container.editorContents.containsKey(tick.uri)) {
@@ -54,11 +64,21 @@ class PreviewViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 
-    // Dipanggil PreviewScreen saat layar masuk / activeUri berganti. Seed INSTAN dari
+    // Dipanggil PreviewScreen/split-pane saat layar masuk / activeUri berganti. Seed INSTAN dari
     // contentMap (tanpa debounce) supaya konten langsung terlihat; debounce 350ms hanya
     // untuk jalur push ketikan (spec §7 "Preview debounce 350ms").
     fun showActiveFile(uri: String?) {
-        val target = uri?.takeIf { isWebFile(it) } ?: return
+        val target = uri?.takeIf { isWebFile(it) }
+        // FIX review bug Medium: dokumen berganti → render lama TIDAK BOLEH tetap tampil
+        // selama window compose async (pane akan menampilkan isi dokumen SEBELUMNYA di bawah
+        // header dokumen baru). Reset ke blank dulu; same-doc re-seed sengaja tidak reset agar
+        // tidak flicker.
+        if (target != shownUri) {
+            shownUri = null
+            debounceJob?.cancel()
+            _uiState.update { it.copy(html = "", isLoading = false) }
+        }
+        if (target == null) return
         val content = container.editorContents[target] ?: return
         shownUri = target
         debounceJob?.cancel()
